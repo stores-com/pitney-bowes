@@ -530,7 +530,7 @@ describe('PitneyBowes.tracking', function() {
             baseUrl: 'invalid'
         });
 
-        pitneyBowes.tracking({ trackingNumber: '4206311892612927005269000081323326' }, function(err, data) {
+        pitneyBowes.tracking({ carrier: 'USPS', trackingNumber: '4206311892612927005269000081323326' }, function(err, data) {
             assert(err);
             assert.strictEqual(err.message, 'Invalid URI "invalid/oauth/token"');
             assert.strictEqual(err.status, undefined);
@@ -556,7 +556,7 @@ describe('PitneyBowes.tracking', function() {
             // Update cache
             cache.put('invalid/oauth/token', token, token.expiresIn * 1000 / 2);
 
-            pitneyBowes.tracking({ trackingNumber: '4206311892612927005269000081323326' }, function(err, data) {
+            pitneyBowes.tracking({ carrier: 'USPS', trackingNumber: '4206311892612927005269000081323326' }, function(err, data) {
                 assert(err);
                 assert.strictEqual(err.message, 'Invalid URI "invalid/v1/tracking/4206311892612927005269000081323326?packageIdentifierType=TrackingNumber&carrier=USPS"');
                 assert.strictEqual(err.status, undefined);
@@ -580,7 +580,7 @@ describe('PitneyBowes.tracking', function() {
                 baseUrl: 'https://httpbin.org/status/500#'
             });
 
-            pitneyBowes.tracking({ trackingNumber: '4206311892612927005269000081323326' }, function(err, data) {
+            pitneyBowes.tracking({ carrier: 'USPS', trackingNumber: '4206311892612927005269000081323326' }, function(err, data) {
                 assert(err);
                 assert.strictEqual(err.message, 'Internal Server Error');
                 assert.strictEqual(err.status, 500);
