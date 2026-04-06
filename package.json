@@ -27,5 +27,5 @@
     "coveralls": "nyc npm test && nyc report --reporter=text-lcov | coveralls",
     "test": "mocha --exit --reporter spec test"
   },
-  "version": "0.3.1"
+  "version": "0.4.0"
 }

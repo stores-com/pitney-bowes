@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-04-06
+### Changed
+- Removed USPS default fallback for the `carrier` parameter in tracking requests. The caller must now explicitly provide `args.carrier`.
+
 ## [0.3.1] - 2021-08-13
 ### Added
 - Added support for creating manifests: https://shipping.pitneybowes.com/api/post-manifests.html
