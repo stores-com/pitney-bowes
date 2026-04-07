@@ -295,6 +295,7 @@ test('PitneyBowes.createManifest', { concurrency: true, timeout: 30000 }, async 
                 }
             ]
         }, {
+            integratorCarrierId: '987654321',
             transactionId: crypto.randomBytes(12).toString('hex')
         });
 

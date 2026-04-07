@@ -68,6 +68,7 @@ function PitneyBowes(args) {
      * Create a manifest for carrier pickup.
      * @param {Object} manifest - Manifest details (carrier, parameters).
      * @param {Object} [options={}]
+     * @param {string} [options.integratorCarrierId] - Integrator carrier ID header.
      * @param {string} [options.transactionId] - Transaction ID header.
      * @param {number} [options.timeout=30000] - Request timeout in milliseconds.
      * @returns {Promise<Object>} The created manifest.
@@ -81,6 +82,10 @@ function PitneyBowes(args) {
             Authorization: `Bearer ${token.access_token}`,
             'Content-Type': 'application/json'
         };
+
+        if (options.integratorCarrierId) {
+            headers['X-PB-Integrator-CarrierId'] = options.integratorCarrierId;
+        }
 
         if (options.transactionId) {
             headers['X-PB-TransactionId'] = options.transactionId;
