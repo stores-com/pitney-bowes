@@ -2,6 +2,7 @@ const assert = require('assert');
 const crypto = require('crypto');
 
 const cache = require('memory-cache');
+const nock = require('nock');
 
 const PitneyBowes = require('../index');
 
@@ -607,16 +608,75 @@ describe('PitneyBowes.tracking', function() {
         });
     });
 
-    it.skip('should return package status', function(done) {
-        const pitneyBowes = new PitneyBowes({
-            api_key: process.env.API_KEY,
-            api_secret: process.env.API_SECRET
-        });
+    it('should return package status', function(done) {
+        const baseUrl = 'https://shipping-api-sandbox.pitneybowes.com/shippingservices';
 
-        pitneyBowes.tracking({ carrier: 'FDR', trackingNumber: '4201000392612927005694000000000019' }, function(err, data) {
+        nock('https://shipping-api-sandbox.pitneybowes.com')
+            .post('/oauth/token')
+            .reply(200, {
+                access_token: 'mock_token',
+                tokenType: 'BearerToken',
+                issuedAt: Date.now().toString(),
+                expiresIn: '36000',
+                clientID: 'mock',
+                org: 'pitneybowes'
+            });
+
+        nock(baseUrl)
+            .get('/v1/tracking/9234690390809100255164')
+            .query({ packageIdentifierType: 'TrackingNumber', carrier: 'USPS' })
+            .reply(200, {
+                packageCount: 1,
+                trackingNumber: '9234690390809100255164',
+                carrier: 'USPS',
+                serviceName: 'USPS Ground Advantage',
+                deliveryDate: '2026-03-30',
+                deliveryTime: '10:45:00',
+                deliveryLocation: 'SPRING BRANCH,TX,78070',
+                deliveryLocationDescription: 'Delivered, In/At Mailbox',
+                scanDetailsList: [
+                    {
+                        standardizedEventCode: 'DLD',
+                        scanDescription: 'Delivered, In/At Mailbox',
+                        packageStatus: 'Delivered',
+                        eventDate: '2026-03-30',
+                        eventTime: '10:45:00',
+                        eventCity: 'SPRING BRANCH',
+                        eventStateOrProvince: 'TX',
+                        postalCode: '78070'
+                    },
+                    {
+                        standardizedEventCode: 'PSR',
+                        scanDescription: 'Shipping Label Created, USPS Awaiting Item',
+                        packageStatus: 'Manifest',
+                        eventDate: '2026-03-27',
+                        eventTime: '09:41:00',
+                        eventCity: 'ELK GROVE VILLAGE',
+                        eventStateOrProvince: 'IL',
+                        postalCode: '60007'
+                    }
+                ],
+                currentStatus: {
+                    standardizedEventCode: 'DLD',
+                    scanDescription: 'Delivered, In/At Mailbox',
+                    packageStatus: 'Delivered',
+                    eventCity: 'SPRING BRANCH',
+                    eventStateOrProvince: 'TX',
+                    postalCode: '78070'
+                },
+                status: 'Delivered'
+            });
+
+        const pitneyBowes = new PitneyBowes();
+
+        pitneyBowes.tracking({ carrier: 'USPS', trackingNumber: '9234690390809100255164' }, function(err, data) {
             assert.ifError(err);
             assert(data);
-            assert.strictEqual(data.trackingNumber, '4201000392612927005694000000000019');
+            assert.strictEqual(data.trackingNumber, '9234690390809100255164');
+            assert.strictEqual(data.carrier, 'USPS');
+            assert.strictEqual(data.status, 'Delivered');
+            assert.strictEqual(data.scanDetailsList.length, 2);
+            assert.strictEqual(data.currentStatus.packageStatus, 'Delivered');
 
             done();
         });
