@@ -26,7 +26,7 @@ This is a breaking change. All methods switch from callbacks to async/await. The
 - **Error handling**: `@stores.com/http-error`
 - **Tests**: `node:test` + nock (only where sandbox is broken)
 - **Production deps**: `@stores.com/http-error`, `memory-cache`
-- **Dev deps**: `@eslint/js`, `globals`, `nock`
+- **Dev deps**: `@eslint/js`, `eslint`, `globals`, `nock`
 
 ## Module Design
 
@@ -59,45 +59,63 @@ All methods are `async` arrow functions on `this`. All accept an optional `_opti
 - Caches token using `memory-cache` with key `pitneybowes:oauth:${options.api_key}`
 - TTL is `expiresIn * 1000 / 2` (half the token lifetime)
 - Uses Basic auth with base64-encoded `api_key:api_secret`
-- Content-Type: `application/x-www-form-urlencoded` with `grant_type=client_credentials`
+- Body: `new URLSearchParams({ grant_type: 'client_credentials' })`
+- Content-Type: `application/x-www-form-urlencoded`
+- Internal callers (other methods) call `await this.getOAuthToken(_options)` to propagate timeout
 
-#### createShipment(shipment, _options)
+#### createShipment(shipment, _options = {})
 
+- Signature: `async (shipment, _options = {}) =>`
+- Calls `await this.getOAuthToken(_options)` for Bearer token
+- Headers: `Authorization: Bearer ${token.access_token}`, `Content-Type: application/json`
 - POST to `${baseUrl}/v1/shipments`
-- Body: JSON shipment object
+- Body: `JSON.stringify(shipment)`
 - Optional headers from `_options`: `X-PB-Integrator-CarrierId`, `X-PB-ShipmentGroupId`, `X-PB-TransactionId`
 - Expects 201 response (note: `fetch` + `res.ok` checks for 200-299, so 201 is ok)
 
-#### createManifest(manifest, _options)
+#### createManifest(manifest, _options = {})
 
+- Signature: `async (manifest, _options = {}) =>`
+- Calls `await this.getOAuthToken(_options)` for Bearer token
+- Headers: `Authorization: Bearer ${token.access_token}`, `Content-Type: application/json`
 - POST to `${baseUrl}/v1/manifests`
-- Body: JSON manifest object
+- Body: `JSON.stringify(manifest)`
 - Optional header from `_options`: `X-PB-TransactionId`
 - Expects 201 response
 
-#### rate(shipment, _options)
+#### rate(shipment, _options = {})
 
+- Signature: `async (shipment, _options = {}) =>`
+- Calls `await this.getOAuthToken(_options)` for Bearer token
+- Headers: `Authorization: Bearer ${token.access_token}`, `Content-Type: application/json`
 - POST to `${baseUrl}/v1/rates`
-- Body: JSON shipment object
+- Body: `JSON.stringify(shipment)`
 - Expects 200 response
 
-#### tracking(args, _options)
+#### tracking(args, _options = {})
 
+- Signature: `async (args, _options = {}) =>`
+- Calls `await this.getOAuthToken(_options)` for Bearer token
+- Headers: `Authorization: Bearer ${token.access_token}`
 - GET to `${baseUrl}/v1/tracking/${args.trackingNumber}?packageIdentifierType=TrackingNumber&carrier=${args.carrier}`
 - `carrier` is required (no default)
 - Expects 200 response
 
-#### tlsTest(_options)
+#### tlsTest(_options = {})
 
-- GET to `${baseTestUrl}/tlstest`
+- Signature: `async (_options = {}) =>`
 - No authentication required
-- Returns response as text (not JSON)
+- GET to `${options.baseTestUrl}/tlstest`
+- Returns response as text (not JSON) via `res.text()`
 - Expects 200 response
 
-#### validateAddress(args, _options)
+#### validateAddress(args, _options = {})
 
+- Signature: `async (args, _options = {}) =>`
+- Calls `await this.getOAuthToken(_options)` for Bearer token
+- Headers: `Authorization: Bearer ${token.access_token}`, `Content-Type: application/json`
 - POST to `${baseUrl}/v1/addresses/verify?minimalAddressValidation=${args.minimalAddressValidation || false}`
-- Body: JSON address object (`args.address`)
+- Body: `JSON.stringify(args.address)`
 - Expects 200 response
 
 ### Error Handling
@@ -215,14 +233,16 @@ Mocked tests call `nock.cleanAll()` in a `t.after()` hook or at the end of the t
   },
   "devDependencies": {
     "@eslint/js": "*",
+    "eslint": "*",
     "globals": "*",
     "nock": "*"
   },
   "scripts": {
     "test": "node --test --test-force-exit --test-reporter=spec",
     "test:only": "node --test --test-force-exit --test-only --test-reporter=spec",
-    "coveralls": "node --test --test-force-exit --experimental-test-coverage --test-reporter=spec --test-reporter=lcov --test-reporter-destination=lcov.info && coveralls < lcov.info"
+    "coveralls": "node --test --test-force-exit --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=lcov.info && coveralls < lcov.info"
   },
+  "license": "MIT",
   "version": "1.0.0"
 }
 ```
@@ -231,9 +251,13 @@ Mocked tests call `nock.cleanAll()` in a `t.after()` hook or at the end of the t
 **Removed devDeps**: `coveralls`, `mocha`, `nyc`
 **Added deps**: `@stores.com/http-error`
 
+### Nock Version
+
+`nock` v14+ is required for native `fetch` interception (uses `@mswjs/interceptors` under the hood). Ensure the installed version supports this.
+
 ### ESLint Config
 
-Update `eslint.config.js` to remove Mocha globals, keep Node globals only:
+Update `eslint.config.js` to remove Mocha globals, keep Node globals only. Match the USPS config (no explicit `ecmaVersion` or `sourceType`):
 
 ```js
 const globals = require('globals');
@@ -243,7 +267,6 @@ module.exports = [
     js.configs.recommended,
     {
         languageOptions: {
-            ecmaVersion: 2022,
             globals: { ...globals.node }
         },
         rules: { /* match USPS config */ }
@@ -251,14 +274,28 @@ module.exports = [
 ];
 ```
 
-### CI Workflow
+Note: the current branch config has `...globals.mocha` — remove it. `eslint` itself stays in devDependencies (used by CI via `npx eslint .`).
 
-Update `.github/workflows/continuousIntegration.yaml`:
+### LICENSE
 
-- Remove MongoDB and Redis services (not used by this library)
-- Update test command to: `node --test --test-force-exit --experimental-test-coverage --test-reporter=spec --test-reporter=lcov --test-reporter-destination=lcov.info`
-- Keep Coveralls upload step
-- Keep Slack notification step
+Change from Apache 2.0 to MIT to match USPS. Update `package.json` `"license"` field from `"Apache-2.0"` to `"MIT"`.
+
+### GitHub Workflows
+
+Replace `.github/workflows/continuousIntegration.yaml` with two workflows matching the USPS pattern:
+
+**`.github/workflows/test.yml`** — runs on push, pull_request, workflow_dispatch:
+- Single job (no matrix — remove MongoDB/Redis versions)
+- `NODE_VERSION: 24.11.0` as env var
+- Steps: setup-node → checkout → npm install → lint → test with coverage → Coveralls upload → Slack notification
+- Test command: `node --test --test-force-exit --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=lcov.info`
+- Coveralls via `coverallsapp/github-action@v2` (replaces `coveralls` npm package)
+- Env vars for test step: `API_KEY`, `API_SECRET` from secrets
+
+**`.github/workflows/publish.yml`** — runs on repository_dispatch, workflow_dispatch:
+- Verifies tests passed on main before publishing
+- `npm publish --provenance`
+- Creates GitHub release with auto-generated notes
 
 ## Migration Impact
 
@@ -268,6 +305,8 @@ Update `.github/workflows/continuousIntegration.yaml`:
 2. Errors are thrown (as `HttpError` or `TypeError`) instead of passed to callbacks
 3. `tracking()` signature unchanged but `carrier` was already required (USPS fallback removed in previous commit)
 4. Error objects change from `http-errors` shape (`err.status`, `err.message`) to `HttpError` shape (`err.message = '${status} ${statusText}'`, `err.json`, `err.text`)
+5. OAuth token cache key changes from URL-based (`${baseUrl}/oauth/token`) to key-based (`pitneybowes:oauth:${api_key}`) — callers who interact with the cache directly (e.g., tests) must update
+6. `getOAuthToken()` now accepts an optional `_options` parameter (non-breaking for callers, but the signature changed)
 
 ### Callers to Update
 
