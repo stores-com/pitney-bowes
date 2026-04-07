@@ -182,17 +182,6 @@ const data = await pitneyBowes.tracking({ carrier: 'USPS', trackingNumber: 'trac
 console.log(data);
 ```
 
-### pitneyBowes.tlsTest()
-
-The minimum supported security protocol for connection to the PB Complete Shipping APIs is TLS v1.2. To test whether your servers support TLS v1.2: From your servers, issue the following operation. The operation retrieves a resource that accepts only the TLS v1.2 protocol:
-
-**Example**
-
-```javascript
-const result = await pitneyBowes.tlsTest();
-console.log(result);
-```
-
 ### pitneyBowes.validateAddress(args)
 
 Address validation verifies and cleanses postal addresses within the United States to help ensure packages are rated accurately and shipments arrive at their final destinations on time. The Validate Address operation sends an address to be verified. The response indicates whether the address is valid and whether the validation check made changes to the address.

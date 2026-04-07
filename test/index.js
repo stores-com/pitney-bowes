@@ -110,12 +110,16 @@ test('PitneyBowes.createShipment', { concurrency: true, timeout: 30000 }, async 
             },
             rates: [
                 {
-                    carrier: 'USPS',
-                    parcelType: 'PKG',
-                    serviceId: 'PM'
+                    carrier: 'PBPRESORT',
+                    parcelType: 'LGENV',
+                    serviceId: 'BPM'
                 }
             ],
             shipmentOptions: [
+                {
+                    name: 'PERMIT_NUMBER',
+                    value: '1234'
+                },
                 {
                     name: 'SHIPPER_ID',
                     value: '9015544760'
@@ -211,7 +215,7 @@ test('PitneyBowes.createManifest', { concurrency: true, timeout: 30000 }, async 
             api_secret: process.env.API_SECRET
         });
 
-        // Create a USPS shipment first so the manifest has something to include
+        // Create a shipment first so the manifest has something to include
         await pitneyBowes.createShipment({
             documents: [
                 {
@@ -244,12 +248,16 @@ test('PitneyBowes.createManifest', { concurrency: true, timeout: 30000 }, async 
             },
             rates: [
                 {
-                    carrier: 'USPS',
-                    parcelType: 'PKG',
-                    serviceId: 'PM'
+                    carrier: 'PBPRESORT',
+                    parcelType: 'LGENV',
+                    serviceId: 'BPM'
                 }
             ],
             shipmentOptions: [
+                {
+                    name: 'PERMIT_NUMBER',
+                    value: '1234'
+                },
                 {
                     name: 'SHIPPER_ID',
                     value: '9015544760'
@@ -270,7 +278,7 @@ test('PitneyBowes.createManifest', { concurrency: true, timeout: 30000 }, async 
         });
 
         const result = await pitneyBowes.createManifest({
-            carrier: 'USPS',
+            carrier: 'PBPRESORT',
             fromAddress: {
                 addressLines: ['4750 Walnut Street'],
                 cityTown: 'Boulder',
@@ -568,41 +576,6 @@ test('PitneyBowes.tracking', { concurrency: true, timeout: 30000 }, async (t) =>
         assert.strictEqual(data.status, 'Delivered');
         assert.strictEqual(data.scanDetailsList.length, 2);
         assert.strictEqual(data.currentStatus.packageStatus, 'Delivered');
-    });
-});
-
-test('PitneyBowes.tlsTest', { concurrency: true, timeout: 30000 }, async (t) => {
-    await t.test('should throw for invalid baseTestUrl', async () => {
-        const pitneyBowes = new PitneyBowes({ baseTestUrl: 'invalid' });
-
-        await assert.rejects(pitneyBowes.tlsTest(), (err) => {
-            assert(err instanceof TypeError);
-            return true;
-        });
-    });
-
-    await t.test('should throw for non 200 status code', async () => {
-        const pitneyBowes = new PitneyBowes({
-            baseTestUrl: 'https://httpbin.org/status/500#'
-        });
-
-        await assert.rejects(pitneyBowes.tlsTest(), (err) => {
-            assert(err instanceof HttpError);
-            return true;
-        });
-    });
-
-    await t.test('should return TLS_Connection_Success', async () => {
-        nock('https://api-test.pitneybowes.com')
-            .get('/tlstest')
-            .reply(200, 'TLS_Connection_Success');
-
-        t.after(() => nock.cleanAll());
-
-        const pitneyBowes = new PitneyBowes();
-        const result = await pitneyBowes.tlsTest();
-
-        assert.strictEqual(result, 'TLS_Connection_Success');
     });
 });
 
