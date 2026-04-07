@@ -678,6 +678,7 @@ describe('PitneyBowes.tracking', function() {
             assert.strictEqual(data.scanDetailsList.length, 2);
             assert.strictEqual(data.currentStatus.packageStatus, 'Delivered');
 
+            nock.cleanAll();
             done();
         });
     });
