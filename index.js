@@ -1,234 +1,237 @@
 const cache = require('memory-cache');
-const createError = require('http-errors');
-const request = require('request');
 
+const HttpError = require('@stores.com/http-error');
+
+/**
+ * Pitney Bowes Shipping API client.
+ * @param {Object} args
+ * @param {string} args.api_key - Pitney Bowes API key.
+ * @param {string} args.api_secret - Pitney Bowes API secret.
+ * @param {string} [args.baseUrl=https://shipping-api-sandbox.pitneybowes.com/shippingservices] - Base URL for the Shipping API.
+ * @see https://docs.shippingapi.pitneybowes.com
+ */
 function PitneyBowes(args) {
-    const options = Object.assign({
+    const _options = {
         api_key: '',
         api_secret: '',
         baseUrl: 'https://shipping-api-sandbox.pitneybowes.com/shippingservices',
-        baseTestUrl: 'https://api-test.pitneybowes.com'
-    }, args);
-
-    this.createShipment = function(shipment, _options, callback) {
-        this.getOAuthToken(function(err, oAuthToken) {
-            if (err) {
-                return callback(err);
-            }
-
-            const req = {
-                auth: {
-                    bearer: oAuthToken.access_token
-                },
-                headers: {},
-                json: shipment,
-                method: 'POST',
-                url: `${options.baseUrl}/v1/shipments`
-            };
-
-            if (_options.integratorCarrierId) {
-                req.headers['X-PB-Integrator-CarrierId'] = _options.integratorCarrierId;
-            }
-
-            if (_options.shipmentGroupId) {
-                req.headers['X-PB-ShipmentGroupId'] = _options.shipmentGroupId;
-            }
-
-            if (_options.transactionId) {
-                req.headers['X-PB-TransactionId'] = _options.transactionId;
-            }
-
-            request(req, function(err, res, body) {
-                if (err) {
-                    return callback(err);
-                }
-
-                if (res.statusCode !== 201) {
-                    return callback(createError(res.statusCode, body && body.length && body[0].message ? body[0] : body));
-                }
-
-                callback(null, body);
-            });
-        });
+        ...args
     };
 
-    this.createManifest = function(manifest, _options, callback) {
-        this.getOAuthToken(function(err, oAuthToken) {
-            if (err) {
-                return callback(err);
-            }
+    /**
+     * Create a shipment and purchase a shipping label.
+     * @param {Object} shipment - Shipment details (addresses, parcel, rates, documents).
+     * @param {Object} [options={}]
+     * @param {string} [options.integratorCarrierId] - Integrator carrier ID header.
+     * @param {string} [options.shipmentGroupId] - Shipment group ID header.
+     * @param {string} [options.transactionId] - Transaction ID header.
+     * @param {number} [options.timeout=30000] - Request timeout in milliseconds.
+     * @returns {Promise<Object>} The created shipment with label data.
+     * @throws {HttpError} If the API returns a non-2xx response.
+     * @see https://docs.shippingapi.pitneybowes.com/api/post-shipments.html
+     */
+    this.createShipment = async (shipment, options = {}) => {
+        const token = await this.getOAuthToken();
 
-            const req = {
-                auth: {
-                    bearer: oAuthToken.access_token
-                },
-                headers: {},
-                json: manifest,
-                method: 'POST',
-                url: `${options.baseUrl}/v1/manifests`
-            };
+        const headers = {
+            Authorization: `Bearer ${token.access_token}`,
+            'Content-Type': 'application/json'
+        };
 
-            if (_options.transactionId) {
-                req.headers['X-PB-TransactionId'] = _options.transactionId;
-            }
-
-            request(req, function(err, res, body) {
-                if (err) {
-                    return callback(err);
-                }
-
-                if (res.statusCode !== 201) {
-                    return callback(createError(res.statusCode, body && body.length && body[0].message ? body[0] : body));
-                }
-
-                callback(null, body);
-            });
-        });
-    };
-
-    this.getOAuthToken = function(callback) {
-        const url = `${options.baseUrl.replace('/shippingservices', '')}/oauth/token`;
-
-        // Try to get the token from memory cache
-        const oAuthToken = cache.get(url);
-
-        if (oAuthToken) {
-            return callback(null, oAuthToken);
+        if (options.integratorCarrierId) {
+            headers['X-PB-Integrator-CarrierId'] = options.integratorCarrierId;
         }
 
-        const req = {
-            form: {
-                grant_type: 'client_credentials'
-            },
-            headers: {
-                Authorization: `Basic ${Buffer.from(`${options.api_key}:${options.api_secret}`).toString('base64')}`
-            },
-            json: true,
+        if (options.shipmentGroupId) {
+            headers['X-PB-ShipmentGroupId'] = options.shipmentGroupId;
+        }
+
+        if (options.transactionId) {
+            headers['X-PB-TransactionId'] = options.transactionId;
+        }
+
+        const res = await fetch(`${_options.baseUrl}/v1/shipments`, {
+            body: JSON.stringify(shipment),
+            headers,
             method: 'POST',
-            url
+            signal: AbortSignal.timeout(options.timeout || 30000)
+        });
+
+        if (!res.ok) {
+            throw await HttpError.from(res);
+        }
+
+        return await res.json();
+    };
+
+    /**
+     * Create a manifest for carrier pickup.
+     * @param {Object} manifest - Manifest details (carrier, parameters).
+     * @param {Object} [options={}]
+     * @param {string} [options.integratorCarrierId] - Integrator carrier ID header.
+     * @param {string} [options.transactionId] - Transaction ID header.
+     * @param {number} [options.timeout=30000] - Request timeout in milliseconds.
+     * @returns {Promise<Object>} The created manifest.
+     * @throws {HttpError} If the API returns a non-2xx response.
+     * @see https://docs.shippingapi.pitneybowes.com/api/post-manifests.html
+     */
+    this.createManifest = async (manifest, options = {}) => {
+        const token = await this.getOAuthToken();
+
+        const headers = {
+            Authorization: `Bearer ${token.access_token}`,
+            'Content-Type': 'application/json'
         };
 
-        request(req, function(err, res, body) {
-            if (err) {
-                return callback(err);
-            }
+        if (options.integratorCarrierId) {
+            headers['X-PB-Integrator-CarrierId'] = options.integratorCarrierId;
+        }
 
-            if (res.statusCode !== 200) {
-                return callback(createError(res.statusCode, body));
-            }
+        if (options.transactionId) {
+            headers['X-PB-TransactionId'] = options.transactionId;
+        }
 
-            // Put the token in memory cache
-            cache.put(url, body, body.expiresIn * 1000 / 2);
-
-            callback(null, body);
+        const res = await fetch(`${_options.baseUrl}/v1/manifests`, {
+            body: JSON.stringify(manifest),
+            headers,
+            method: 'POST',
+            signal: AbortSignal.timeout(options.timeout || 30000)
         });
+
+        if (!res.ok) {
+            throw await HttpError.from(res);
+        }
+
+        return await res.json();
     };
 
-    this.rate = function(shipment, _options, callback) {
-        this.getOAuthToken(function(err, oAuthToken) {
-            if (err) {
-                return callback(err);
-            }
+    /**
+     * Get an OAuth token for API authentication. Tokens are cached for half their lifetime.
+     * @param {Object} [options={}]
+     * @param {number} [options.timeout=30000] - Request timeout in milliseconds.
+     * @returns {Promise<Object>} The OAuth token with access_token, tokenType, expiresIn, etc.
+     * @throws {HttpError} If the API returns a non-2xx response.
+     * @see https://docs.shippingapi.pitneybowes.com/getting-started.html
+     */
+    this.getOAuthToken = async (options = {}) => {
+        const url = `${_options.baseUrl.replace('/shippingservices', '')}/oauth/token`;
+        const key = `pitneybowes:oauth:${_options.api_key}`;
 
-            const req = {
-                auth: {
-                    bearer: oAuthToken.access_token
-                },
-                headers: {},
-                json: shipment,
-                method: 'POST',
-                url: `${options.baseUrl}/v1/rates`
-            };
+        const oAuthToken = cache.get(key);
 
-            request(req, function(err, res, body) {
-                if (err) {
-                    return callback(err);
-                }
+        if (oAuthToken) {
+            return oAuthToken;
+        }
 
-                if (res.statusCode !== 200) {
-                    return callback(createError(res.statusCode, body && body.length && body[0].message ? body[0] : body));
-                }
-
-                callback(null, body);
-            });
+        const res = await fetch(url, {
+            body: new URLSearchParams({ grant_type: 'client_credentials' }),
+            headers: {
+                Authorization: `Basic ${Buffer.from(`${_options.api_key}:${_options.api_secret}`).toString('base64')}`,
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            method: 'POST',
+            signal: AbortSignal.timeout(options.timeout || 30000)
         });
+
+        if (!res.ok) {
+            throw await HttpError.from(res);
+        }
+
+        const json = await res.json();
+
+        cache.put(key, json, json.expiresIn * 1000 / 2);
+
+        return json;
     };
 
-    this.tracking = function(args, callback) {
-        this.getOAuthToken(function(err, oAuthToken) {
-            if (err) {
-                return callback(err);
-            }
+    /**
+     * Get shipping rates for a shipment.
+     * @param {Object} shipment - Shipment details (addresses, parcel, rates).
+     * @param {Object} [options={}]
+     * @param {number} [options.timeout=30000] - Request timeout in milliseconds.
+     * @returns {Promise<Object>} Rate quotes with carrier pricing.
+     * @throws {HttpError} If the API returns a non-2xx response.
+     * @see https://docs.shippingapi.pitneybowes.com/api/post-rates.html
+     */
+    this.rate = async (shipment, options = {}) => {
+        const token = await this.getOAuthToken();
 
-            const req = {
-                auth: {
-                    bearer: oAuthToken.access_token
-                },
-                json: true,
-                method: 'GET',
-                url: `${options.baseUrl}/v1/tracking/${args.trackingNumber}?packageIdentifierType=TrackingNumber&carrier=${args.carrier || 'USPS'}`
-            };
-
-            request(req, function(err, res, body) {
-                if (err) {
-                    return callback(err);
-                }
-
-                if (res.statusCode !== 200) {
-                    return callback(createError(res.statusCode, body));
-                }
-
-                callback(null, body);
-            });
+        const res = await fetch(`${_options.baseUrl}/v1/rates`, {
+            body: JSON.stringify(shipment),
+            headers: {
+                Authorization: `Bearer ${token.access_token}`,
+                'Content-Type': 'application/json'
+            },
+            method: 'POST',
+            signal: AbortSignal.timeout(options.timeout || 30000)
         });
+
+        if (!res.ok) {
+            throw await HttpError.from(res);
+        }
+
+        return await res.json();
     };
 
-    this.tlsTest = function(callback) {
-        const req = {
+    /**
+     * Get tracking status for a package.
+     * @param {Object} args
+     * @param {string} args.trackingNumber - The package tracking number.
+     * @param {string} args.carrier - The carrier code (e.g. 'USPS').
+     * @param {Object} [options={}]
+     * @param {number} [options.timeout=30000] - Request timeout in milliseconds.
+     * @returns {Promise<Object>} Tracking details including status and scan events.
+     * @throws {HttpError} If the API returns a non-2xx response.
+     * @see https://docs.shippingapi.pitneybowes.com/api/get-tracking-details.html
+     */
+    this.tracking = async (args, options = {}) => {
+        const token = await this.getOAuthToken();
+
+        const res = await fetch(`${_options.baseUrl}/v1/tracking/${args.trackingNumber}?packageIdentifierType=TrackingNumber&carrier=${args.carrier}`, {
+            headers: {
+                Authorization: `Bearer ${token.access_token}`
+            },
             method: 'GET',
-            url: `${options.baseTestUrl}/tlstest`
-        };
-
-        request(req, function(err, res, body) {
-            if (err) {
-                return callback(err);
-            }
-
-            if (res.statusCode !== 200) {
-                return callback(createError(res.statusCode));
-            }
-
-            callback(null, body);
+            signal: AbortSignal.timeout(options.timeout || 30000)
         });
+
+        if (!res.ok) {
+            throw await HttpError.from(res);
+        }
+
+        return await res.json();
     };
 
-    this.validateAddress = function(args, callback) {
-        this.getOAuthToken(function(err, oAuthToken) {
-            if (err) {
-                return callback(err);
-            }
+    /**
+     * Validate a US address and add postal service information.
+     * @param {Object} args
+     * @param {Object} args.address - The address to validate.
+     * @param {boolean} [args.minimalAddressValidation=false] - If true, only validate minimum required fields.
+     * @param {Object} [options={}]
+     * @param {number} [options.timeout=30000] - Request timeout in milliseconds.
+     * @returns {Promise<Object>} Validated address with postal service data.
+     * @throws {HttpError} If the API returns a non-2xx response.
+     * @see https://docs.shippingapi.pitneybowes.com/api/post-address-verify.html
+     */
+    this.validateAddress = async (args, options = {}) => {
+        const token = await this.getOAuthToken();
 
-            const req = {
-                auth: {
-                    bearer: oAuthToken.access_token
-                },
-                json: args.address,
-                method: 'POST',
-                url: `${options.baseUrl}/v1/addresses/verify?minimalAddressValidation=${args.minimalAddressValidation || false}`
-            };
-
-            request(req, function(err, res, body) {
-                if (err) {
-                    return callback(err);
-                }
-
-                if (res.statusCode !== 200) {
-                    return callback(createError(res.statusCode, body));
-                }
-
-                callback(null, body);
-            });
+        const res = await fetch(`${_options.baseUrl}/v1/addresses/verify?minimalAddressValidation=${args.minimalAddressValidation || false}`, {
+            body: JSON.stringify(args.address),
+            headers: {
+                'Accept-Language': 'en-US',
+                Authorization: `Bearer ${token.access_token}`,
+                'Content-Type': 'application/json'
+            },
+            method: 'POST',
+            signal: AbortSignal.timeout(options.timeout || 30000)
         });
+
+        if (!res.ok) {
+            throw await HttpError.from(res);
+        }
+
+        return await res.json();
     };
 }
 

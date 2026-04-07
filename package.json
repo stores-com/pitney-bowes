@@ -1,31 +1,30 @@
 {
-  "dependencies": {
-    "http-errors": "~1.8.0",
-    "memory-cache": "~0.2.0",
-    "request": "~2.88.0"
-  },
-  "description": "The Pitney Bowes Complete Shipping APIs let you integrate shipping services from multiple carriers, including USPS® and Newgistics®, into your services and applications.",
-  "devDependencies": {
-    "coveralls": "*",
-    "mocha": "*",
-    "nyc": "*"
-  },
-  "keywords": [
-    "logistics",
-    "newgistics",
-    "pitney-bowes",
-    "shipping",
-    "zpl"
-  ],
-  "license": "Apache-2.0",
-  "name": "pitney-bowes",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/mediocre/pitney-bowes.git"
-  },
-  "scripts": {
-    "coveralls": "nyc npm test && nyc report --reporter=text-lcov | coveralls",
-    "test": "mocha --exit --reporter spec test"
-  },
-  "version": "0.3.1"
+    "dependencies": {
+        "@stores.com/http-error": "~1.0.0",
+        "memory-cache": "~0.2.0"
+    },
+    "description": "The Pitney Bowes Complete Shipping APIs let you integrate shipping services from multiple carriers, including USPS, into your services and applications.",
+    "devDependencies": {
+        "@eslint/js": "*",
+        "eslint": "*",
+        "globals": "*"
+    },
+    "keywords": [
+        "logistics",
+        "pitney-bowes",
+        "shipping",
+        "tracking"
+    ],
+    "license": "MIT",
+    "name": "pitney-bowes",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/stores-com/pitney-bowes.git"
+    },
+    "scripts": {
+        "coveralls": "node --test --test-force-exit --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=lcov.info && coveralls < lcov.info",
+        "test": "node --test --test-force-exit --test-reporter=spec",
+        "test:only": "node --test --test-force-exit --test-only --test-reporter=spec"
+    },
+    "version": "1.0.0"
 }

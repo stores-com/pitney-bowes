@@ -1,11 +1,11 @@
 # pitney-bowes
 
-[![Build Status](https://travis-ci.org/mediocre/pitney-bowes.svg?branch=main)](https://travis-ci.org/mediocre/pitney-bowes)
-[![Coverage Status](https://coveralls.io/repos/github/mediocre/pitney-bowes/badge.svg?branch=main)](https://coveralls.io/github/mediocre/pitney-bowes?branch=main)
+[![Build Status](https://github.com/stores-com/pitney-bowes/actions/workflows/test.yml/badge.svg)](https://github.com/stores-com/pitney-bowes/actions)
+[![Coverage Status](https://coveralls.io/repos/github/stores-com/pitney-bowes/badge.svg?branch=main)](https://coveralls.io/github/stores-com/pitney-bowes?branch=main)
 
-The Pitney Bowes Complete Shipping APIs let you integrate shipping services from multiple carriers, including USPS® and Newgistics®, into your services and applications. 
+The Pitney Bowes Complete Shipping APIs let you integrate shipping services from multiple carriers, including USPS, into your services and applications.
 
-https://shipping.pitneybowes.com
+https://docs.shippingapi.pitneybowes.com
 
 ## Usage
 
@@ -15,11 +15,11 @@ const PitneyBowes = require('pitney-bowes');
 const pitneyBowes = new PitneyBowes({
     api_key: 'your_api_key',
     api_secret: 'your_api_secret',
-    baseUrl: 'https://api-sandbox.pitneybowes.com/shippingservices'
+    baseUrl: 'https://shipping-api-sandbox.pitneybowes.com/shippingservices'
 });
 ```
 
-### pitneyBowes.createShipment(shipment, options, callback)
+### pitneyBowes.createShipment(shipment, options)
 
 This operation creates a shipment and purchases a shipment label. The API returns the label as either a Base64 string or a link to a PDF.
 
@@ -89,48 +89,100 @@ const options = {
     transactionId: crypto.randomBytes(12).toString('hex')
 };
 
-pitneyBowes.createShipment(shipment, options, function(err, shipment) {
-    console.log(shipment);
-});
+const result = await pitneyBowes.createShipment(shipment, options);
+console.log(result);
 ```
 
-### pitneyBowes.getOAuthToken(callback)
+### pitneyBowes.createManifest(manifest, options)
 
-Each request to the PB Complete Shipping APIs requires authentication via an OAuth token. This API call generates the OAuth token based on the Base64-encoded value of the API key and secret associated with your PB Complete Shipping APIs developer account. The token expires after 10 hours, after which you must create a new one.
+This operation creates a manifest for carrier pickup.
 
 **Example**
 
 ```javascript
-pitneyBowes.getOAuthToken(function(err, oAuthToken) {
-    console.log(oAuthToken);
-});
+const manifest = {
+    carrier: 'USPS',
+    submissionDate: '2026-04-07',
+    parameters: [
+        {
+            name: 'SHIPPER_ID',
+            value: '9015544760'
+        }
+    ]
+};
+
+const options = {
+    transactionId: crypto.randomBytes(12).toString('hex')
+};
+
+const result = await pitneyBowes.createManifest(manifest, options);
+console.log(result);
 ```
 
-### pitneyBowes.tracking(args, callback)
+### pitneyBowes.getOAuthToken()
+
+Each request to the PB Complete Shipping APIs requires authentication via an OAuth token. This API call generates the OAuth token based on the Base64-encoded value of the API key and secret associated with your PB Complete Shipping APIs developer account. The token expires after 10 hours, after which you must create a new one. Tokens are cached automatically.
+
+**Example**
+
+```javascript
+const oAuthToken = await pitneyBowes.getOAuthToken();
+console.log(oAuthToken);
+```
+
+### pitneyBowes.rate(shipment, options)
+
+This operation retrieves shipping rate quotes.
+
+**Example**
+
+```javascript
+const shipment = {
+    fromAddress: {
+        addressLines: ['4750 Walnut Street'],
+        cityTown: 'Boulder',
+        countryCode: 'US',
+        name: 'Pitney Bowes',
+        postalCode: '80301',
+        stateProvince: 'CO'
+    },
+    parcel: {
+        weight: {
+            unitOfMeasurement: 'OZ',
+            weight: 3
+        }
+    },
+    rates: [
+        {
+            carrier: 'USPS'
+        }
+    ],
+    toAddress: {
+        addressLines: ['114 Whitney Ave'],
+        cityTown: 'New Haven',
+        countryCode: 'US',
+        name: 'John Doe',
+        postalCode: '06510',
+        stateProvince: 'CT'
+    }
+};
+
+const result = await pitneyBowes.rate(shipment);
+console.log(result);
+```
+
+### pitneyBowes.tracking(args)
 
 Shipment labels that are printed using the PB Complete Shipping APIs are automatically tracked. This operation retrieves package status for a label.
 
 **Example**
 
 ```javascript
-pitneyBowes.tracking({ trackingNumber: 'trackingNumber' }, function(err, data) {
-    console.log(data);
-});
+const data = await pitneyBowes.tracking({ carrier: 'USPS', trackingNumber: 'trackingNumber' });
+console.log(data);
 ```
 
-### pitneyBowes.tlsTest(callback)
-
-The minimum supported security protocol for connection to the PB Complete Shipping APIs is TLS v1.2. To test whether your servers support TLS v1.2: From your servers, issue the following operation. The operation retrieves a resource that accepts only the TLS v1.2 protocol:
-
-**Example**
-
-```javascript
-pitneyBowes.tlsTest(function(err, res) {
-    console.log(res);
-});
-```
-
-### pitneyBowes.validateAddress(args, callback)
+### pitneyBowes.validateAddress(args)
 
 Address validation verifies and cleanses postal addresses within the United States to help ensure packages are rated accurately and shipments arrive at their final destinations on time. The Validate Address operation sends an address to be verified. The response indicates whether the address is valid and whether the validation check made changes to the address.
 
@@ -151,7 +203,6 @@ const address = {
     email: 'john.d@example.com'
 };
 
-pitneyBowes.validateAddress({ address, minimalAddressValidation: false }, function(err, data) {
-    console.log(data);
-});
+const data = await pitneyBowes.validateAddress({ address, minimalAddressValidation: false });
+console.log(data);
 ```

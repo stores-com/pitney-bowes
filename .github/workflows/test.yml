@@ -1,0 +1,102 @@
+name: Test
+
+on: [push, pull_request, workflow_dispatch]
+
+jobs:
+  test:
+    if: github.actor != 'dependabot[bot]'
+    env:
+      NODE_VERSION: 24.11.0
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Setup Node ${{ env.NODE_VERSION }}
+      uses: actions/setup-node@v6
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+
+    - name: Checkout
+      uses: actions/checkout@v6
+
+    - name: Install dependencies
+      run: npm install
+
+    - name: Lint
+      run: npx eslint .
+
+    - name: Test
+      env:
+        API_KEY: ${{ secrets.API_KEY }}
+        API_SECRET: ${{ secrets.API_SECRET }}
+      run: |
+        node --test --test-force-exit --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=lcov.info
+
+    - name: Upload coverage to Coveralls
+      if: success()
+      uses: coverallsapp/github-action@v2
+      with:
+        fail-on-error: false
+        file: lcov.info
+
+    - if: always()
+      name: Send Slack notification
+      run: |
+        # Set common variables
+        COMMIT_AUTHOR=$(git log -1 --format='%an' ${{ github.sha }} | sed "s/'/'\\\\''/g")
+        COMMIT_MSG=$(git log -1 --pretty=format:%s ${{ github.sha }} | sed "s/'/'\\\\''/g" | head -c 100)
+        COMMIT_URL="https://github.com/${{ github.repository }}/commit/${{ github.sha }}"
+        GH_RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+        SLACK_CHANNEL=$(echo "#${{ github.event.repository.name }}" | sed 's/\./-/g')
+
+        # Set status-specific variables
+        if [ "${{ job.status }}" == "success" ]; then
+          HEADER_TEXT=":white_check_mark: Tests passed for ${{ github.event.repository.name }}"
+        else
+          HEADER_TEXT=":x: Tests failed for ${{ github.event.repository.name }}"
+        fi
+
+        # Send Slack notification
+        curl -X POST -H 'Content-type: application/json' \
+          --data '{
+            "blocks": [
+              {
+                "text": {
+                  "text": "'"${HEADER_TEXT}"'",
+                  "type": "plain_text"
+                },
+                "type": "header"
+              },
+              {
+                "text": {
+                  "text": "*Author:* '"${COMMIT_AUTHOR}"'\n*Branch:* ${{ github.ref_name }}\n*Commit:* <'"${COMMIT_URL}"'|'"${SHORT_SHA}"'>\n*Message:* '"${COMMIT_MSG}"'",
+                  "type": "mrkdwn"
+                },
+                "type": "section"
+              },
+              {
+                "elements": [
+                  {
+                    "text": {
+                      "text": "Code Coverage",
+                      "type": "plain_text"
+                    },
+                    "type": "button",
+                    "url": "https://coveralls.io/github/${{ github.repository }}"
+                  },
+                  {
+                    "text": {
+                      "text": "GitHub Action",
+                      "type": "plain_text"
+                    },
+                    "type": "button",
+                    "url": "'"${GH_RUN_URL}"'"
+                  }
+                ],
+                "type": "actions"
+              }
+            ],
+            "channel": "'"${SLACK_CHANNEL}"'",
+            "icon_url": "https://stores.com/apple-touch-icon.png",
+            "username": "Stores.com"
+          }' ${{ secrets.SLACK_WEBHOOK_URL }}
