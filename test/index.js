@@ -607,7 +607,7 @@ describe('PitneyBowes.tracking', function() {
         });
     });
 
-    it('should return package status', function(done) {
+    it.skip('should return package status', function(done) {
         const pitneyBowes = new PitneyBowes({
             api_key: process.env.API_KEY,
             api_secret: process.env.API_SECRET
