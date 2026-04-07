@@ -110,16 +110,12 @@ test('PitneyBowes.createShipment', { concurrency: true, timeout: 30000 }, async 
             },
             rates: [
                 {
-                    carrier: 'PBPRESORT',
-                    parcelType: 'LGENV',
-                    serviceId: 'BPM'
+                    carrier: 'USPS',
+                    parcelType: 'PKG',
+                    serviceId: 'PM'
                 }
             ],
             shipmentOptions: [
-                {
-                    name: 'PERMIT_NUMBER',
-                    value: '1234'
-                },
                 {
                     name: 'SHIPPER_ID',
                     value: '9015544760'
@@ -213,6 +209,64 @@ test('PitneyBowes.createManifest', { concurrency: true, timeout: 30000 }, async 
         const pitneyBowes = new PitneyBowes({
             api_key: process.env.API_KEY,
             api_secret: process.env.API_SECRET
+        });
+
+        // Create a USPS shipment first so the manifest has something to include
+        await pitneyBowes.createShipment({
+            documents: [
+                {
+                    contentType: 'BASE64',
+                    fileFormat: 'ZPL2',
+                    printDialogOption: 'NO_PRINT_DIALOG',
+                    size: 'DOC_6X4',
+                    type: 'SHIPPING_LABEL'
+                }
+            ],
+            fromAddress: {
+                addressLines: ['4750 Walnut Street'],
+                cityTown: 'Boulder',
+                countryCode: 'US',
+                name: 'Pitney Bowes',
+                postalCode: '80301',
+                stateProvince: 'CO'
+            },
+            parcel: {
+                dimension: {
+                    height: 9,
+                    length: 12,
+                    unitOfMeasurement: 'IN',
+                    width: 0.25
+                },
+                weight: {
+                    unitOfMeasurement: 'OZ',
+                    weight: 3
+                }
+            },
+            rates: [
+                {
+                    carrier: 'USPS',
+                    parcelType: 'PKG',
+                    serviceId: 'PM'
+                }
+            ],
+            shipmentOptions: [
+                {
+                    name: 'SHIPPER_ID',
+                    value: '9015544760'
+                }
+            ],
+            toAddress: {
+                addressLines: ['114 Whitney Ave'],
+                cityTown: 'New Haven',
+                countryCode: 'US',
+                name: 'John Doe',
+                postalCode: '06510',
+                stateProvince: 'CT'
+            }
+        }, {
+            integratorCarrierId: '987654321',
+            shipmentGroupId: '500002',
+            transactionId: crypto.randomBytes(12).toString('hex')
         });
 
         const result = await pitneyBowes.createManifest({
