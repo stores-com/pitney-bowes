@@ -109,7 +109,7 @@ function PitneyBowes(args) {
      * @see https://docs.shippingapi.pitneybowes.com/getting-started.html
      */
     this.getOAuthToken = async (options = {}) => {
-        const url = `${options.baseUrl.replace('/shippingservices', '')}/oauth/token`;
+        const url = `${_options.baseUrl.replace('/shippingservices', '')}/oauth/token`;
         const key = `pitneybowes:oauth:${_options.api_key}`;
 
         const oAuthToken = cache.get(key);
