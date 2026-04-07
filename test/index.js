@@ -537,12 +537,10 @@ test('PitneyBowes.tracking', { concurrency: true, timeout: 30000 }, async (t) =>
         });
     });
 
-    await t.test('should return tracking events', async () => {
+    await t.test('should return tracking events', async (t) => {
         const originalFetch = global.fetch;
 
-        t.after(() => { global.fetch = originalFetch; });
-
-        global.fetch = async (url, options) => {
+        t.mock.method(global, 'fetch', async (url, options) => {
             if (typeof url === 'string' && url.includes('/v1/tracking/9234690390809100255164')) {
                 return new Response(JSON.stringify({
                     packageCount: 1,
@@ -609,7 +607,7 @@ test('PitneyBowes.tracking', { concurrency: true, timeout: 30000 }, async (t) =>
             }
 
             return originalFetch(url, options);
-        };
+        });
 
         const pitneyBowes = new PitneyBowes({
             api_key: process.env.API_KEY,
