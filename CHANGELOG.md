@@ -6,6 +6,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-04-07
+### Changed
+- **BREAKING**: All methods now return Promises instead of accepting callbacks
+- **BREAKING**: Errors are now `HttpError` instances (from `@stores.com/http-error`) instead of `http-errors` instances
+- Replaced `request` with native `fetch`
+- Added timeout support via `AbortSignal.timeout()` (default 30s)
+- Migrated tests from Mocha to `node:test`
+- Migrated coverage from `nyc` to `node --experimental-test-coverage`
+- Changed license from Apache-2.0 to MIT
+
+### Removed
+- Removed `request` dependency (deprecated)
+- Removed `http-errors` dependency
+- Removed Mocha, nyc, coveralls dev dependencies
+
 ## [0.4.0] - 2026-04-06
 ### Changed
 - Removed USPS default fallback for the `carrier` parameter in tracking requests. The caller must now explicitly provide `args.carrier`.

@@ -1,234 +1,175 @@
 const cache = require('memory-cache');
-const createError = require('http-errors');
-const request = require('request');
+
+const HttpError = require('@stores.com/http-error');
 
 function PitneyBowes(args) {
-    const options = Object.assign({
+    const options = {
         api_key: '',
         api_secret: '',
         baseUrl: 'https://shipping-api-sandbox.pitneybowes.com/shippingservices',
-        baseTestUrl: 'https://api-test.pitneybowes.com'
-    }, args);
-
-    this.createShipment = function(shipment, _options, callback) {
-        this.getOAuthToken(function(err, oAuthToken) {
-            if (err) {
-                return callback(err);
-            }
-
-            const req = {
-                auth: {
-                    bearer: oAuthToken.access_token
-                },
-                headers: {},
-                json: shipment,
-                method: 'POST',
-                url: `${options.baseUrl}/v1/shipments`
-            };
-
-            if (_options.integratorCarrierId) {
-                req.headers['X-PB-Integrator-CarrierId'] = _options.integratorCarrierId;
-            }
-
-            if (_options.shipmentGroupId) {
-                req.headers['X-PB-ShipmentGroupId'] = _options.shipmentGroupId;
-            }
-
-            if (_options.transactionId) {
-                req.headers['X-PB-TransactionId'] = _options.transactionId;
-            }
-
-            request(req, function(err, res, body) {
-                if (err) {
-                    return callback(err);
-                }
-
-                if (res.statusCode !== 201) {
-                    return callback(createError(res.statusCode, body && body.length && body[0].message ? body[0] : body));
-                }
-
-                callback(null, body);
-            });
-        });
+        baseTestUrl: 'https://api-test.pitneybowes.com',
+        ...args
     };
 
-    this.createManifest = function(manifest, _options, callback) {
-        this.getOAuthToken(function(err, oAuthToken) {
-            if (err) {
-                return callback(err);
-            }
+    this.createShipment = async (shipment, _options = {}) => {
+        const token = await this.getOAuthToken();
 
-            const req = {
-                auth: {
-                    bearer: oAuthToken.access_token
-                },
-                headers: {},
-                json: manifest,
-                method: 'POST',
-                url: `${options.baseUrl}/v1/manifests`
-            };
+        const headers = {
+            Authorization: `Bearer ${token.access_token}`,
+            'Content-Type': 'application/json'
+        };
 
-            if (_options.transactionId) {
-                req.headers['X-PB-TransactionId'] = _options.transactionId;
-            }
-
-            request(req, function(err, res, body) {
-                if (err) {
-                    return callback(err);
-                }
-
-                if (res.statusCode !== 201) {
-                    return callback(createError(res.statusCode, body && body.length && body[0].message ? body[0] : body));
-                }
-
-                callback(null, body);
-            });
-        });
-    };
-
-    this.getOAuthToken = function(callback) {
-        const url = `${options.baseUrl.replace('/shippingservices', '')}/oauth/token`;
-
-        // Try to get the token from memory cache
-        const oAuthToken = cache.get(url);
-
-        if (oAuthToken) {
-            return callback(null, oAuthToken);
+        if (_options.integratorCarrierId) {
+            headers['X-PB-Integrator-CarrierId'] = _options.integratorCarrierId;
         }
 
-        const req = {
-            form: {
-                grant_type: 'client_credentials'
-            },
-            headers: {
-                Authorization: `Basic ${Buffer.from(`${options.api_key}:${options.api_secret}`).toString('base64')}`
-            },
-            json: true,
+        if (_options.shipmentGroupId) {
+            headers['X-PB-ShipmentGroupId'] = _options.shipmentGroupId;
+        }
+
+        if (_options.transactionId) {
+            headers['X-PB-TransactionId'] = _options.transactionId;
+        }
+
+        const res = await fetch(`${options.baseUrl}/v1/shipments`, {
+            body: JSON.stringify(shipment),
+            headers,
             method: 'POST',
-            url
+            signal: AbortSignal.timeout(_options.timeout || 30000)
+        });
+
+        if (!res.ok) {
+            throw await HttpError.from(res);
+        }
+
+        return await res.json();
+    };
+
+    this.createManifest = async (manifest, _options = {}) => {
+        const token = await this.getOAuthToken();
+
+        const headers = {
+            Authorization: `Bearer ${token.access_token}`,
+            'Content-Type': 'application/json'
         };
 
-        request(req, function(err, res, body) {
-            if (err) {
-                return callback(err);
-            }
+        if (_options.transactionId) {
+            headers['X-PB-TransactionId'] = _options.transactionId;
+        }
 
-            if (res.statusCode !== 200) {
-                return callback(createError(res.statusCode, body));
-            }
-
-            // Put the token in memory cache
-            cache.put(url, body, body.expiresIn * 1000 / 2);
-
-            callback(null, body);
+        const res = await fetch(`${options.baseUrl}/v1/manifests`, {
+            body: JSON.stringify(manifest),
+            headers,
+            method: 'POST',
+            signal: AbortSignal.timeout(_options.timeout || 30000)
         });
+
+        if (!res.ok) {
+            throw await HttpError.from(res);
+        }
+
+        return await res.json();
     };
 
-    this.rate = function(shipment, _options, callback) {
-        this.getOAuthToken(function(err, oAuthToken) {
-            if (err) {
-                return callback(err);
-            }
+    this.getOAuthToken = async (_options = {}) => {
+        const url = `${options.baseUrl.replace('/shippingservices', '')}/oauth/token`;
+        const key = `pitneybowes:oauth:${options.api_key}`;
 
-            const req = {
-                auth: {
-                    bearer: oAuthToken.access_token
-                },
-                headers: {},
-                json: shipment,
-                method: 'POST',
-                url: `${options.baseUrl}/v1/rates`
-            };
+        const oAuthToken = cache.get(key);
 
-            request(req, function(err, res, body) {
-                if (err) {
-                    return callback(err);
-                }
+        if (oAuthToken) {
+            return oAuthToken;
+        }
 
-                if (res.statusCode !== 200) {
-                    return callback(createError(res.statusCode, body && body.length && body[0].message ? body[0] : body));
-                }
-
-                callback(null, body);
-            });
+        const res = await fetch(url, {
+            body: new URLSearchParams({ grant_type: 'client_credentials' }),
+            headers: {
+                Authorization: `Basic ${Buffer.from(`${options.api_key}:${options.api_secret}`).toString('base64')}`,
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            method: 'POST',
+            signal: AbortSignal.timeout(_options.timeout || 30000)
         });
+
+        if (!res.ok) {
+            throw await HttpError.from(res);
+        }
+
+        const json = await res.json();
+
+        cache.put(key, json, json.expiresIn * 1000 / 2);
+
+        return json;
     };
 
-    this.tracking = function(args, callback) {
-        this.getOAuthToken(function(err, oAuthToken) {
-            if (err) {
-                return callback(err);
-            }
+    this.rate = async (shipment, _options = {}) => {
+        const token = await this.getOAuthToken();
 
-            const req = {
-                auth: {
-                    bearer: oAuthToken.access_token
-                },
-                json: true,
-                method: 'GET',
-                url: `${options.baseUrl}/v1/tracking/${args.trackingNumber}?packageIdentifierType=TrackingNumber&carrier=${args.carrier}`
-            };
-
-            request(req, function(err, res, body) {
-                if (err) {
-                    return callback(err);
-                }
-
-                if (res.statusCode !== 200) {
-                    return callback(createError(res.statusCode, body));
-                }
-
-                callback(null, body);
-            });
+        const res = await fetch(`${options.baseUrl}/v1/rates`, {
+            body: JSON.stringify(shipment),
+            headers: {
+                Authorization: `Bearer ${token.access_token}`,
+                'Content-Type': 'application/json'
+            },
+            method: 'POST',
+            signal: AbortSignal.timeout(_options.timeout || 30000)
         });
+
+        if (!res.ok) {
+            throw await HttpError.from(res);
+        }
+
+        return await res.json();
     };
 
-    this.tlsTest = function(callback) {
-        const req = {
+    this.tracking = async (args, _options = {}) => {
+        const token = await this.getOAuthToken();
+
+        const res = await fetch(`${options.baseUrl}/v1/tracking/${args.trackingNumber}?packageIdentifierType=TrackingNumber&carrier=${args.carrier}`, {
+            headers: {
+                Authorization: `Bearer ${token.access_token}`
+            },
             method: 'GET',
-            url: `${options.baseTestUrl}/tlstest`
-        };
-
-        request(req, function(err, res, body) {
-            if (err) {
-                return callback(err);
-            }
-
-            if (res.statusCode !== 200) {
-                return callback(createError(res.statusCode));
-            }
-
-            callback(null, body);
+            signal: AbortSignal.timeout(_options.timeout || 30000)
         });
+
+        if (!res.ok) {
+            throw await HttpError.from(res);
+        }
+
+        return await res.json();
     };
 
-    this.validateAddress = function(args, callback) {
-        this.getOAuthToken(function(err, oAuthToken) {
-            if (err) {
-                return callback(err);
-            }
-
-            const req = {
-                auth: {
-                    bearer: oAuthToken.access_token
-                },
-                json: args.address,
-                method: 'POST',
-                url: `${options.baseUrl}/v1/addresses/verify?minimalAddressValidation=${args.minimalAddressValidation || false}`
-            };
-
-            request(req, function(err, res, body) {
-                if (err) {
-                    return callback(err);
-                }
-
-                if (res.statusCode !== 200) {
-                    return callback(createError(res.statusCode, body));
-                }
-
-                callback(null, body);
-            });
+    this.tlsTest = async (_options = {}) => {
+        const res = await fetch(`${options.baseTestUrl}/tlstest`, {
+            signal: AbortSignal.timeout(_options.timeout || 30000)
         });
+
+        if (!res.ok) {
+            throw await HttpError.from(res);
+        }
+
+        return await res.text();
+    };
+
+    this.validateAddress = async (args, _options = {}) => {
+        const token = await this.getOAuthToken();
+
+        const res = await fetch(`${options.baseUrl}/v1/addresses/verify?minimalAddressValidation=${args.minimalAddressValidation || false}`, {
+            body: JSON.stringify(args.address),
+            headers: {
+                Authorization: `Bearer ${token.access_token}`,
+                'Content-Type': 'application/json'
+            },
+            method: 'POST',
+            signal: AbortSignal.timeout(_options.timeout || 30000)
+        });
+
+        if (!res.ok) {
+            throw await HttpError.from(res);
+        }
+
+        return await res.json();
     };
 }
 

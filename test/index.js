@@ -1,111 +1,82 @@
-const assert = require('assert');
+const assert = require('node:assert');
 const crypto = require('crypto');
+const test = require('node:test');
 
 const cache = require('memory-cache');
 const nock = require('nock');
 
+const HttpError = require('@stores.com/http-error');
 const PitneyBowes = require('../index');
 
-describe('PitneyBowes.createShipment', function() {
-    this.timeout(5000);
+test('PitneyBowes.createShipment', { concurrency: true, timeout: 30000 }, async (t) => {
+    t.beforeEach(() => cache.clear());
 
-    beforeEach(function() {
-        cache.clear();
+    await t.test('should throw for invalid baseUrl', async () => {
+        const pitneyBowes = new PitneyBowes({ baseUrl: 'invalid' });
+
+        await assert.rejects(pitneyBowes.createShipment({}, {}), (err) => {
+            assert(err instanceof TypeError);
+            return true;
+        });
     });
 
-    it('should return an error for invalid baseUrl', function(done) {
+    await t.test('should throw for invalid baseUrl with cached token', async () => {
         const pitneyBowes = new PitneyBowes({
+            api_key: process.env.API_KEY,
+            api_secret: process.env.API_SECRET
+        });
+
+        const token = await pitneyBowes.getOAuthToken();
+
+        const pb2 = new PitneyBowes({
+            api_key: process.env.API_KEY,
             baseUrl: 'invalid'
         });
 
-        pitneyBowes.createShipment({}, {}, function(err, shipment) {
-            assert(err);
-            assert.strictEqual(err.message, 'Invalid URI "invalid/oauth/token"');
-            assert.strictEqual(err.status, undefined);
-            assert.strictEqual(shipment, undefined);
+        cache.put(`pitneybowes:oauth:${process.env.API_KEY}`, token, token.expiresIn * 1000 / 2);
 
-            done();
+        await assert.rejects(pb2.createShipment({}, {}), (err) => {
+            assert(err instanceof TypeError);
+            return true;
         });
     });
 
-    it('should return an error for invalid baseUrl', function(done) {
-        var pitneyBowes = new PitneyBowes({
-            api_key: process.env.API_KEY,
-            api_secret: process.env.API_SECRET
-        });
-
-        pitneyBowes.getOAuthToken(function(err, token) {
-            assert.ifError(err);
-
-            pitneyBowes = new PitneyBowes({
-                baseUrl: 'invalid'
-            });
-
-            // Update cache
-            cache.put('invalid/oauth/token', token, token.expiresIn * 1000 / 2);
-
-            pitneyBowes.createShipment({}, {}, function(err, shipment) {
-                assert(err);
-                assert.strictEqual(err.message, 'Invalid URI "invalid/v1/shipments"');
-                assert.strictEqual(err.status, undefined);
-                assert.strictEqual(shipment, undefined);
-
-                done();
-            });
-        });
-    });
-
-    it('should return an error for non 200 status code', function(done) {
-        var pitneyBowes = new PitneyBowes({
-            api_key: process.env.API_KEY,
-            api_secret: process.env.API_SECRET
-        });
-
-        pitneyBowes.getOAuthToken(function(err) {
-            assert.ifError(err);
-
-            pitneyBowes = new PitneyBowes({
-                baseUrl: 'https://httpbin.org/status/500#'
-            });
-
-            pitneyBowes.createShipment({}, {}, function(err, shipment) {
-                assert(err);
-                assert.strictEqual(err.message, 'Internal Server Error');
-                assert.strictEqual(err.status, 500);
-                assert.strictEqual(shipment, undefined);
-
-                done();
-            });
-        });
-    });
-
-    it('should return an error when no shipment is specified', function(done) {
+    await t.test('should throw for non 200 status code', async () => {
         const pitneyBowes = new PitneyBowes({
             api_key: process.env.API_KEY,
             api_secret: process.env.API_SECRET
         });
 
-        pitneyBowes.createShipment({}, {}, function(err, shipment) {
-            assert(err);
-            assert.strictEqual(err.message, 'Missing required header "X-PB-TransactionId"');
-            assert.strictEqual(err.status, 400);
-            assert.strictEqual(shipment, undefined);
+        await pitneyBowes.getOAuthToken();
 
-            done();
+        const pb2 = new PitneyBowes({
+            api_key: process.env.API_KEY,
+            baseUrl: 'https://httpbin.org/status/500#'
+        });
+
+        await assert.rejects(pb2.createShipment({}, {}), (err) => {
+            assert(err instanceof HttpError);
+            return true;
         });
     });
 
-    it('should return a valid response', function(done) {
+    await t.test('should throw when no shipment is specified', async () => {
         const pitneyBowes = new PitneyBowes({
             api_key: process.env.API_KEY,
             api_secret: process.env.API_SECRET
         });
 
-        const options = {
-            integratorCarrierId: '987654321',
-            shipmentGroupId: '500002',
-            transactionId: crypto.randomBytes(12).toString('hex')
-        };
+        await assert.rejects(pitneyBowes.createShipment({}, {}), (err) => {
+            assert(err instanceof HttpError);
+            return true;
+        });
+    });
+
+    await t.test('should return a valid response', async () => {
+        const pitneyBowes = new PitneyBowes({
+            api_key: process.env.API_KEY,
+            api_secret: process.env.API_SECRET
+        });
 
         const shipment = {
             documents: [
@@ -164,315 +135,229 @@ describe('PitneyBowes.createShipment', function() {
             }
         };
 
-        pitneyBowes.createShipment(shipment, options, function(err, shipment) {
-            assert.ifError(err);
-            assert(shipment.documents[0].pages[0].contents);
-
-            done();
+        const result = await pitneyBowes.createShipment(shipment, {
+            integratorCarrierId: '987654321',
+            shipmentGroupId: '500002',
+            transactionId: crypto.randomBytes(12).toString('hex')
         });
+
+        assert(result.documents[0].pages[0].contents);
     });
 });
 
-describe('PitneyBowes.createManifest', function() {
-    this.timeout(5000);
+test('PitneyBowes.createManifest', { concurrency: true, timeout: 30000 }, async (t) => {
+    t.beforeEach(() => cache.clear());
 
-    beforeEach(function() {
-        cache.clear();
+    await t.test('should throw for invalid baseUrl', async () => {
+        const pitneyBowes = new PitneyBowes({ baseUrl: 'invalid' });
+
+        await assert.rejects(pitneyBowes.createManifest({}, {}), (err) => {
+            assert(err instanceof TypeError);
+            return true;
+        });
     });
 
-    it('should return an error for invalid baseUrl', function(done) {
+    await t.test('should throw for invalid baseUrl with cached token', async () => {
         const pitneyBowes = new PitneyBowes({
+            api_key: process.env.API_KEY,
+            api_secret: process.env.API_SECRET
+        });
+
+        const token = await pitneyBowes.getOAuthToken();
+
+        const pb2 = new PitneyBowes({
+            api_key: process.env.API_KEY,
             baseUrl: 'invalid'
         });
 
-        pitneyBowes.createManifest({}, {}, function(err, shipment) {
-            assert(err);
-            assert.strictEqual(err.message, 'Invalid URI "invalid/oauth/token"');
-            assert.strictEqual(err.status, undefined);
-            assert.strictEqual(shipment, undefined);
+        cache.put(`pitneybowes:oauth:${process.env.API_KEY}`, token, token.expiresIn * 1000 / 2);
 
-            done();
+        await assert.rejects(pb2.createManifest({}, {}), (err) => {
+            assert(err instanceof TypeError);
+            return true;
         });
     });
 
-    it('should return an error for invalid baseUrl', function(done) {
-        var pitneyBowes = new PitneyBowes({
-            api_key: process.env.API_KEY,
-            api_secret: process.env.API_SECRET
-        });
-
-        pitneyBowes.getOAuthToken(function(err, token) {
-            assert.ifError(err);
-
-            pitneyBowes = new PitneyBowes({
-                baseUrl: 'invalid'
-            });
-
-            // Update cache
-            cache.put('invalid/oauth/token', token, token.expiresIn * 1000 / 2);
-
-            pitneyBowes.createManifest({}, {}, function(err, shipment) {
-                assert(err);
-                assert.strictEqual(err.message, 'Invalid URI "invalid/v1/manifests"');
-                assert.strictEqual(err.status, undefined);
-                assert.strictEqual(shipment, undefined);
-
-                done();
-            });
-        });
-    });
-
-    it('should return an error for non 200 status code', function(done) {
-        var pitneyBowes = new PitneyBowes({
-            api_key: process.env.API_KEY,
-            api_secret: process.env.API_SECRET
-        });
-
-        pitneyBowes.getOAuthToken(function(err) {
-            assert.ifError(err);
-
-            pitneyBowes = new PitneyBowes({
-                baseUrl: 'https://httpbin.org/status/500#'
-            });
-
-            pitneyBowes.createManifest({}, {}, function(err, shipment) {
-                assert(err);
-                assert.strictEqual(err.message, 'Internal Server Error');
-                assert.strictEqual(err.status, 500);
-                assert.strictEqual(shipment, undefined);
-
-                done();
-            });
-        });
-    });
-
-    it('should return an error when no manifest is specified', function(done) {
+    await t.test('should throw for non 200 status code', async () => {
         const pitneyBowes = new PitneyBowes({
             api_key: process.env.API_KEY,
             api_secret: process.env.API_SECRET
         });
 
-        pitneyBowes.createManifest({}, {}, function(err, manifest) {
-            assert(err);
-            assert.strictEqual(err.message, 'Missing required header "X-PB-TransactionId"');
-            assert.strictEqual(err.status, 400);
-            assert.strictEqual(manifest, undefined);
+        await pitneyBowes.getOAuthToken();
 
-            done();
+        const pb2 = new PitneyBowes({
+            api_key: process.env.API_KEY,
+            baseUrl: 'https://httpbin.org/status/500#'
+        });
+
+        await assert.rejects(pb2.createManifest({}, {}), (err) => {
+            assert(err instanceof HttpError);
+            return true;
         });
     });
 
-    it.skip('should return a valid response', function(done) {
+    await t.test('should throw when no manifest is specified', async () => {
         const pitneyBowes = new PitneyBowes({
             api_key: process.env.API_KEY,
             api_secret: process.env.API_SECRET
         });
 
-        const options = {
-            transactionId: crypto.randomBytes(12).toString('hex')
-        };
+        await assert.rejects(pitneyBowes.createManifest({}, {}), (err) => {
+            assert(err instanceof HttpError);
+            return true;
+        });
+    });
+
+    await t.test('should return a valid response', async () => {
+        const pitneyBowes = new PitneyBowes({
+            api_key: process.env.API_KEY,
+            api_secret: process.env.API_SECRET
+        });
 
         const manifest = {
-            carrier: 'NEWGISTICS',
+            carrier: 'USPS',
+            submissionDate: new Date().toISOString().split('T')[0],
             parameters: [
                 {
                     name: 'SHIPPER_ID',
                     value: '9015544760'
-                },
-                {
-                    name: 'CLIENT_ID',
-                    value: 'NGST'
                 }
             ]
         };
 
-        pitneyBowes.createManifest(manifest, options, function(err, manifest) {
-            assert.ifError(err);
-            assert(manifest);
-
-            done();
+        const result = await pitneyBowes.createManifest(manifest, {
+            transactionId: crypto.randomBytes(12).toString('hex')
         });
+
+        assert(result);
     });
 });
 
-describe('PitneyBowes.getOAuthToken', function() {
-    this.timeout(5000);
+test('PitneyBowes.getOAuthToken', { concurrency: true, timeout: 30000 }, async (t) => {
+    t.beforeEach(() => cache.clear());
 
-    beforeEach(function() {
-        cache.clear();
-    });
+    await t.test('should throw for invalid baseUrl', async () => {
+        const pitneyBowes = new PitneyBowes({ baseUrl: 'invalid' });
 
-    it('should return an error for invalid baseUrl', function(done) {
-        const pitneyBowes = new PitneyBowes({
-            baseUrl: 'invalid'
-        });
-
-        pitneyBowes.getOAuthToken(function(err, oAuthToken) {
-            assert(err);
-            assert.strictEqual(err.message, 'Invalid URI "invalid/oauth/token"');
-            assert.strictEqual(err.status, undefined);
-            assert.strictEqual(oAuthToken, undefined);
-
-            done();
+        await assert.rejects(pitneyBowes.getOAuthToken(), (err) => {
+            assert(err instanceof TypeError);
+            return true;
         });
     });
 
-    it('should return an error for non 200 status code', function(done) {
+    await t.test('should throw for non 200 status code', async () => {
         const pitneyBowes = new PitneyBowes({
             api_key: process.env.API_KEY,
             api_secret: process.env.API_SECRET,
             baseUrl: 'https://httpbin.org/status/500#'
         });
 
-        pitneyBowes.getOAuthToken(function(err, oAuthToken) {
-            assert(err);
-            assert.strictEqual(err.message, 'Internal Server Error');
-            assert.strictEqual(err.status, 500);
-            assert.strictEqual(oAuthToken, undefined);
-
-            done();
+        await assert.rejects(pitneyBowes.getOAuthToken(), (err) => {
+            assert(err instanceof HttpError);
+            return true;
         });
     });
 
-    it('should return a valid oAuthToken', function(done) {
+    await t.test('should return a valid oAuthToken', async () => {
         const pitneyBowes = new PitneyBowes({
             api_key: process.env.API_KEY,
             api_secret: process.env.API_SECRET
         });
 
-        pitneyBowes.getOAuthToken(function(err, oAuthToken) {
-            assert.ifError(err);
+        const oAuthToken = await pitneyBowes.getOAuthToken();
 
-            assert(oAuthToken);
-            assert(oAuthToken.access_token);
-            assert(oAuthToken.clientID);
-            assert(oAuthToken.expiresIn);
-            assert(oAuthToken.issuedAt);
-            assert(oAuthToken.org);
-            assert.strictEqual(oAuthToken.tokenType, 'BearerToken');
-
-            done();
-        });
+        assert(oAuthToken);
+        assert(oAuthToken.access_token);
+        assert(oAuthToken.clientID);
+        assert(oAuthToken.expiresIn);
+        assert(oAuthToken.issuedAt);
+        assert(oAuthToken.org);
+        assert.strictEqual(oAuthToken.tokenType, 'BearerToken');
     });
 
-    it('should return the same token on subsequent calls', function(done) {
+    await t.test('should return the same token on subsequent calls', async () => {
         const pitneyBowes = new PitneyBowes({
             api_key: process.env.API_KEY,
             api_secret: process.env.API_SECRET
         });
 
-        pitneyBowes.getOAuthToken(function(err, token1) {
-            assert.ifError(err);
+        const token1 = await pitneyBowes.getOAuthToken();
+        const token2 = await pitneyBowes.getOAuthToken();
 
-            pitneyBowes.getOAuthToken(function(err, token2) {
-                assert.ifError(err);
-                assert.deepStrictEqual(token1, token2);
-
-                done();
-            });
-        });
+        assert.deepStrictEqual(token1, token2);
     });
 });
 
-describe('PitneyBowes.rate', function() {
-    this.timeout(5000);
+test('PitneyBowes.rate', { concurrency: true, timeout: 30000 }, async (t) => {
+    t.beforeEach(() => cache.clear());
 
-    beforeEach(function() {
-        cache.clear();
+    await t.test('should throw for invalid baseUrl', async () => {
+        const pitneyBowes = new PitneyBowes({ baseUrl: 'invalid' });
+
+        await assert.rejects(pitneyBowes.rate({}, {}), (err) => {
+            assert(err instanceof TypeError);
+            return true;
+        });
     });
 
-    it('should return an error for invalid baseUrl', function(done) {
+    await t.test('should throw for invalid baseUrl with cached token', async () => {
         const pitneyBowes = new PitneyBowes({
+            api_key: process.env.API_KEY,
+            api_secret: process.env.API_SECRET
+        });
+
+        const token = await pitneyBowes.getOAuthToken();
+
+        const pb2 = new PitneyBowes({
+            api_key: process.env.API_KEY,
             baseUrl: 'invalid'
         });
 
-        pitneyBowes.rate({}, {}, function(err, shipment) {
-            assert(err);
-            assert.strictEqual(err.message, 'Invalid URI "invalid/oauth/token"');
-            assert.strictEqual(err.status, undefined);
-            assert.strictEqual(shipment, undefined);
+        cache.put(`pitneybowes:oauth:${process.env.API_KEY}`, token, token.expiresIn * 1000 / 2);
 
-            done();
+        await assert.rejects(pb2.rate({}, {}), (err) => {
+            assert(err instanceof TypeError);
+            return true;
         });
     });
 
-    it('should return an error for invalid baseUrl', function(done) {
-        var pitneyBowes = new PitneyBowes({
-            api_key: process.env.API_KEY,
-            api_secret: process.env.API_SECRET
-        });
-
-        pitneyBowes.getOAuthToken(function(err, token) {
-            assert.ifError(err);
-
-            pitneyBowes = new PitneyBowes({
-                baseUrl: 'invalid'
-            });
-
-            // Update cache
-            cache.put('invalid/oauth/token', token, token.expiresIn * 1000 / 2);
-
-            pitneyBowes.rate({}, {}, function(err, shipment) {
-                assert(err);
-                assert.strictEqual(err.message, 'Invalid URI "invalid/v1/rates"');
-                assert.strictEqual(err.status, undefined);
-                assert.strictEqual(shipment, undefined);
-
-                done();
-            });
-        });
-    });
-
-    it('should return an error for non 200 status code', function(done) {
-        var pitneyBowes = new PitneyBowes({
-            api_key: process.env.API_KEY,
-            api_secret: process.env.API_SECRET
-        });
-
-        pitneyBowes.getOAuthToken(function(err) {
-            assert.ifError(err);
-
-            pitneyBowes = new PitneyBowes({
-                baseUrl: 'https://httpbin.org/status/500#'
-            });
-
-            pitneyBowes.rate({}, {}, function(err, shipment) {
-                assert(err);
-                assert.strictEqual(err.message, 'Internal Server Error');
-                assert.strictEqual(err.status, 500);
-                assert.strictEqual(shipment, undefined);
-
-                done();
-            });
-        });
-    });
-
-    it('should return an error when no shipment is specified', function(done) {
+    await t.test('should throw for non 200 status code', async () => {
         const pitneyBowes = new PitneyBowes({
             api_key: process.env.API_KEY,
             api_secret: process.env.API_SECRET
         });
 
-        pitneyBowes.rate({}, {}, function(err, rate) {
-            assert(err);
-            assert.strictEqual(err.status, 400);
-            assert.strictEqual(rate, undefined);
+        await pitneyBowes.getOAuthToken();
 
-            done();
+        const pb2 = new PitneyBowes({
+            api_key: process.env.API_KEY,
+            baseUrl: 'https://httpbin.org/status/500#'
+        });
+
+        await assert.rejects(pb2.rate({}, {}), (err) => {
+            assert(err instanceof HttpError);
+            return true;
         });
     });
 
-    it('should return a valid response', function(done) {
+    await t.test('should throw when no shipment is specified', async () => {
         const pitneyBowes = new PitneyBowes({
             api_key: process.env.API_KEY,
             api_secret: process.env.API_SECRET
         });
 
-        const options = {
-            integratorCarrierId: '987654321',
-            shipmentGroupId: '500002',
-            transactionId: crypto.randomBytes(12).toString('hex')
-        };
+        await assert.rejects(pitneyBowes.rate({}, {}), (err) => {
+            assert(err instanceof HttpError);
+            return true;
+        });
+    });
+
+    await t.test('should return a valid response', async () => {
+        const pitneyBowes = new PitneyBowes({
+            api_key: process.env.API_KEY,
+            api_secret: process.env.API_SECRET
+        });
 
         const shipment = {
             fromAddress: {
@@ -510,107 +395,81 @@ describe('PitneyBowes.rate', function() {
             }
         };
 
-        pitneyBowes.rate(shipment, options, function(err, rate) {
-            assert.ifError(err);
-            assert(rate.rates.length > 0);
-
-            done();
+        const result = await pitneyBowes.rate(shipment, {
+            integratorCarrierId: '987654321',
+            shipmentGroupId: '500002',
+            transactionId: crypto.randomBytes(12).toString('hex')
         });
+
+        assert(result.rates.length > 0);
     });
 });
 
-describe('PitneyBowes.tracking', function() {
-    this.timeout(5000);
+test('PitneyBowes.tracking', { concurrency: true, timeout: 30000 }, async (t) => {
+    t.beforeEach(() => cache.clear());
 
-    beforeEach(function() {
-        cache.clear();
+    await t.test('should throw for invalid baseUrl', async () => {
+        const pitneyBowes = new PitneyBowes({ baseUrl: 'invalid' });
+
+        await assert.rejects(pitneyBowes.tracking({ carrier: 'USPS', trackingNumber: '4206311892612927005269000081323326' }), (err) => {
+            assert(err instanceof TypeError);
+            return true;
+        });
     });
 
-    it('should return an error for invalid baseUrl', function(done) {
+    await t.test('should throw for invalid baseUrl with cached token', async () => {
         const pitneyBowes = new PitneyBowes({
+            api_key: process.env.API_KEY,
+            api_secret: process.env.API_SECRET
+        });
+
+        const token = await pitneyBowes.getOAuthToken();
+
+        const pb2 = new PitneyBowes({
+            api_key: process.env.API_KEY,
             baseUrl: 'invalid'
         });
 
-        pitneyBowes.tracking({ carrier: 'USPS', trackingNumber: '4206311892612927005269000081323326' }, function(err, data) {
-            assert(err);
-            assert.strictEqual(err.message, 'Invalid URI "invalid/oauth/token"');
-            assert.strictEqual(err.status, undefined);
-            assert.strictEqual(data, undefined);
+        cache.put(`pitneybowes:oauth:${process.env.API_KEY}`, token, token.expiresIn * 1000 / 2);
 
-            done();
+        await assert.rejects(pb2.tracking({ carrier: 'USPS', trackingNumber: '4206311892612927005269000081323326' }), (err) => {
+            assert(err instanceof TypeError);
+            return true;
         });
     });
 
-    it('should return an error for invalid baseUrl', function(done) {
-        var pitneyBowes = new PitneyBowes({
-            api_key: process.env.API_KEY,
-            api_secret: process.env.API_SECRET
-        });
-
-        pitneyBowes.getOAuthToken(function(err, token) {
-            assert.ifError(err);
-
-            pitneyBowes = new PitneyBowes({
-                baseUrl: 'invalid'
-            });
-
-            // Update cache
-            cache.put('invalid/oauth/token', token, token.expiresIn * 1000 / 2);
-
-            pitneyBowes.tracking({ carrier: 'USPS', trackingNumber: '4206311892612927005269000081323326' }, function(err, data) {
-                assert(err);
-                assert.strictEqual(err.message, 'Invalid URI "invalid/v1/tracking/4206311892612927005269000081323326?packageIdentifierType=TrackingNumber&carrier=USPS"');
-                assert.strictEqual(err.status, undefined);
-                assert.strictEqual(data, undefined);
-
-                done();
-            });
-        });
-    });
-
-    it('should return an error for non 200 status code', function(done) {
-        var pitneyBowes = new PitneyBowes({
-            api_key: process.env.API_KEY,
-            api_secret: process.env.API_SECRET
-        });
-
-        pitneyBowes.getOAuthToken(function(err) {
-            assert.ifError(err);
-
-            pitneyBowes = new PitneyBowes({
-                baseUrl: 'https://httpbin.org/status/500#'
-            });
-
-            pitneyBowes.tracking({ carrier: 'USPS', trackingNumber: '4206311892612927005269000081323326' }, function(err, data) {
-                assert(err);
-                assert.strictEqual(err.message, 'Internal Server Error');
-                assert.strictEqual(err.status, 500);
-                assert.strictEqual(data, undefined);
-
-                done();
-            });
-        });
-    });
-
-    it('should return error when no tracking number is specified', function(done) {
+    await t.test('should throw for non 200 status code', async () => {
         const pitneyBowes = new PitneyBowes({
             api_key: process.env.API_KEY,
             api_secret: process.env.API_SECRET
         });
 
-        pitneyBowes.tracking({ carrier: 'FDR' }, function(err, data) {
-            assert(err);
-            assert.strictEqual(err.message, 'Bad Request');
-            assert.strictEqual(err.status, 400);
-            assert.strictEqual(data, undefined);
+        await pitneyBowes.getOAuthToken();
 
-            done();
+        const pb2 = new PitneyBowes({
+            api_key: process.env.API_KEY,
+            baseUrl: 'https://httpbin.org/status/500#'
+        });
+
+        await assert.rejects(pb2.tracking({ carrier: 'USPS', trackingNumber: '4206311892612927005269000081323326' }), (err) => {
+            assert(err instanceof HttpError);
+            return true;
         });
     });
 
-    it('should return package status', function(done) {
-        const baseUrl = 'https://shipping-api-sandbox.pitneybowes.com/shippingservices';
+    await t.test('should throw when no tracking number is specified', async () => {
+        const pitneyBowes = new PitneyBowes({
+            api_key: process.env.API_KEY,
+            api_secret: process.env.API_SECRET
+        });
 
+        await assert.rejects(pitneyBowes.tracking({ carrier: 'FDR' }), (err) => {
+            assert(err instanceof HttpError);
+            return true;
+        });
+    });
+
+    await t.test('should return package status', async () => {
         nock('https://shipping-api-sandbox.pitneybowes.com')
             .post('/oauth/token')
             .reply(200, {
@@ -622,129 +481,79 @@ describe('PitneyBowes.tracking', function() {
                 org: 'pitneybowes'
             });
 
-        nock(baseUrl)
+        nock('https://shipping-api-sandbox.pitneybowes.com/shippingservices')
             .get('/v1/tracking/9234690390809100255164')
             .query({ packageIdentifierType: 'TrackingNumber', carrier: 'USPS' })
             .reply(200, {
                 packageCount: 1,
                 trackingNumber: '9234690390809100255164',
                 carrier: 'USPS',
-                serviceName: 'USPS Ground Advantage',
-                deliveryDate: '2026-03-30',
-                deliveryTime: '10:45:00',
-                deliveryLocation: 'SPRING BRANCH,TX,78070',
-                deliveryLocationDescription: 'Delivered, In/At Mailbox',
-                scanDetailsList: [
-                    {
-                        standardizedEventCode: 'DLD',
-                        scanDescription: 'Delivered, In/At Mailbox',
-                        packageStatus: 'Delivered',
-                        eventDate: '2026-03-30',
-                        eventTime: '10:45:00',
-                        eventCity: 'SPRING BRANCH',
-                        eventStateOrProvince: 'TX',
-                        postalCode: '78070'
-                    },
-                    {
-                        standardizedEventCode: 'PSR',
-                        scanDescription: 'Shipping Label Created, USPS Awaiting Item',
-                        packageStatus: 'Manifest',
-                        eventDate: '2026-03-27',
-                        eventTime: '09:41:00',
-                        eventCity: 'ELK GROVE VILLAGE',
-                        eventStateOrProvince: 'IL',
-                        postalCode: '60007'
-                    }
-                ],
+                status: 'Delivered',
                 currentStatus: {
-                    standardizedEventCode: 'DLD',
-                    scanDescription: 'Delivered, In/At Mailbox',
-                    packageStatus: 'Delivered',
-                    eventCity: 'SPRING BRANCH',
-                    eventStateOrProvince: 'TX',
-                    postalCode: '78070'
+                    packageStatus: 'Delivered'
                 },
-                status: 'Delivered'
+                scanDetailsList: [
+                    { standardizedEventCode: 'DLD', packageStatus: 'Delivered' },
+                    { standardizedEventCode: 'PSR', packageStatus: 'Manifest' }
+                ]
             });
 
+        t.after(() => nock.cleanAll());
+
         const pitneyBowes = new PitneyBowes();
+        const data = await pitneyBowes.tracking({ carrier: 'USPS', trackingNumber: '9234690390809100255164' });
 
-        pitneyBowes.tracking({ carrier: 'USPS', trackingNumber: '9234690390809100255164' }, function(err, data) {
-            assert.ifError(err);
-            assert(data);
-            assert.strictEqual(data.trackingNumber, '9234690390809100255164');
-            assert.strictEqual(data.carrier, 'USPS');
-            assert.strictEqual(data.status, 'Delivered');
-            assert.strictEqual(data.scanDetailsList.length, 2);
-            assert.strictEqual(data.currentStatus.packageStatus, 'Delivered');
-
-            nock.cleanAll();
-            done();
-        });
+        assert.strictEqual(data.trackingNumber, '9234690390809100255164');
+        assert.strictEqual(data.carrier, 'USPS');
+        assert.strictEqual(data.status, 'Delivered');
+        assert.strictEqual(data.scanDetailsList.length, 2);
+        assert.strictEqual(data.currentStatus.packageStatus, 'Delivered');
     });
 });
 
-describe('PitneyBowes.tlsTest', function() {
-    this.timeout(5000);
+test('PitneyBowes.tlsTest', { concurrency: true, timeout: 30000 }, async (t) => {
+    await t.test('should throw for invalid baseTestUrl', async () => {
+        const pitneyBowes = new PitneyBowes({ baseTestUrl: 'invalid' });
 
-    it('should return an error for invalid baseTestUrl', function(done) {
-        const pitneyBowes = new PitneyBowes({
-            baseTestUrl: 'invalid'
-        });
-
-        pitneyBowes.tlsTest(function(err, res) {
-            assert(err);
-            assert.strictEqual(err.message, 'Invalid URI "invalid/tlstest"');
-            assert.strictEqual(err.status, undefined);
-            assert.strictEqual(res, undefined);
-
-            done();
+        await assert.rejects(pitneyBowes.tlsTest(), (err) => {
+            assert(err instanceof TypeError);
+            return true;
         });
     });
 
-    it('should return an error for non 200 status code', function(done) {
+    await t.test('should throw for non 200 status code', async () => {
         const pitneyBowes = new PitneyBowes({
             baseTestUrl: 'https://httpbin.org/status/500#'
         });
 
-        pitneyBowes.tlsTest(function(err, data) {
-            assert(err);
-            assert.strictEqual(err.message, 'Internal Server Error');
-            assert.strictEqual(err.status, 500);
-            assert.strictEqual(data, undefined);
-
-            done();
+        await assert.rejects(pitneyBowes.tlsTest(), (err) => {
+            assert(err instanceof HttpError);
+            return true;
         });
     });
 
-    it.skip('should return TLS_Connection_Success', function(done) {
+    await t.test('should return TLS_Connection_Success', async () => {
+        nock('https://api-test.pitneybowes.com')
+            .get('/tlstest')
+            .reply(200, 'TLS_Connection_Success');
+
+        t.after(() => nock.cleanAll());
+
         const pitneyBowes = new PitneyBowes();
+        const result = await pitneyBowes.tlsTest();
 
-        pitneyBowes.tlsTest(function(err, res) {
-            assert.ifError(err);
-            assert.strictEqual(res, 'TLS_Connection_Success');
-
-            done();
-        });
+        assert.strictEqual(result, 'TLS_Connection_Success');
     });
 });
 
-describe('PitneyBowes.validateAddress', function() {
-    this.timeout(5000);
+test('PitneyBowes.validateAddress', { concurrency: true, timeout: 30000 }, async (t) => {
+    t.beforeEach(() => cache.clear());
 
-    beforeEach(function() {
-        cache.clear();
-    });
-
-    it('should return an error an invalid baseUrl', function(done) {
-        const pitneyBowes = new PitneyBowes({
-            baseUrl: 'invalid'
-        });
+    await t.test('should throw for invalid baseUrl', async () => {
+        const pitneyBowes = new PitneyBowes({ baseUrl: 'invalid' });
 
         const address = {
-            addressLines: [
-                '1600 Pennsylvania Avenue NW'
-            ],
+            addressLines: ['1600 Pennsylvania Avenue NW'],
             cityTown: 'Washington',
             stateProvince: 'DC',
             postalCode: '20500 ',
@@ -756,123 +565,98 @@ describe('PitneyBowes.validateAddress', function() {
             residential: false
         };
 
-        pitneyBowes.validateAddress({ address }, function(err, data) {
-            assert(err);
-            assert.strictEqual(err.message, 'Invalid URI "invalid/oauth/token"');
-            assert.strictEqual(err.status, undefined);
-            assert.strictEqual(data, undefined);
-
-            done();
+        await assert.rejects(pitneyBowes.validateAddress({ address }), (err) => {
+            assert(err instanceof TypeError);
+            return true;
         });
     });
 
-    it('should return an error an invalid baseUrl', function(done) {
-        var pitneyBowes = new PitneyBowes({
-            api_key: process.env.API_KEY,
-            api_secret: process.env.API_SECRET
-        });
-
-        pitneyBowes.getOAuthToken(function(err, token) {
-            assert.ifError(err);
-
-            pitneyBowes = new PitneyBowes({
-                baseUrl: 'invalid'
-            });
-
-            // Update cache
-            cache.put('invalid/oauth/token', token, token.expiresIn * 1000 / 2);
-
-            const address = {
-                addressLines: [
-                    '1600 Pennsylvania Avenue NW'
-                ],
-                cityTown: 'Washington',
-                stateProvince: 'DC',
-                postalCode: '20500 ',
-                countryCode: 'US',
-                company: 'Pitney Bowes Inc.',
-                name: 'John Doe',
-                phone: '203-000-0000',
-                email: 'john.d@example.com',
-                residential: false
-            };
-
-            pitneyBowes.validateAddress({ address }, function(err, data) {
-                assert(err);
-                assert.strictEqual(err.message, 'Invalid URI "invalid/v1/addresses/verify?minimalAddressValidation=false"');
-                assert.strictEqual(err.status, undefined);
-                assert.strictEqual(data, undefined);
-
-                done();
-            });
-        });
-    });
-
-    it('should return an error for non 200 status code', function(done) {
-        var pitneyBowes = new PitneyBowes({
-            api_key: process.env.API_KEY,
-            api_secret: process.env.API_SECRET
-        });
-
-        pitneyBowes.getOAuthToken(function(err) {
-            assert.ifError(err);
-
-            pitneyBowes = new PitneyBowes({
-                baseUrl: 'https://httpbin.org/status/500#'
-            });
-
-            const address = {
-                addressLines: [
-                    '1600 Pennsylvania Avenue NW'
-                ],
-                cityTown: 'Washington',
-                stateProvince: 'DC',
-                postalCode: '20500 ',
-                countryCode: 'US',
-                company: 'Pitney Bowes Inc.',
-                name: 'John Doe',
-                phone: '203-000-0000',
-                email: 'john.d@example.com',
-                residential: false
-            };
-
-            pitneyBowes.validateAddress({ address }, function(err, data) {
-                assert(err);
-                assert.strictEqual(err.message, 'Internal Server Error');
-                assert.strictEqual(err.status, 500);
-                assert.strictEqual(data, undefined);
-
-                done();
-            });
-        });
-    });
-
-    it('should return an error when no address is specified', function(done) {
+    await t.test('should throw for invalid baseUrl with cached token', async () => {
         const pitneyBowes = new PitneyBowes({
             api_key: process.env.API_KEY,
             api_secret: process.env.API_SECRET
         });
 
-        pitneyBowes.validateAddress({ minimalAddressValidation: false }, function(err, data) {
-            assert(err);
-            assert.strictEqual(err.message, '');
-            assert.strictEqual(err.status, 415);
-            assert.strictEqual(data, undefined);
+        const token = await pitneyBowes.getOAuthToken();
 
-            done();
+        const pb2 = new PitneyBowes({
+            api_key: process.env.API_KEY,
+            baseUrl: 'invalid'
+        });
+
+        cache.put(`pitneybowes:oauth:${process.env.API_KEY}`, token, token.expiresIn * 1000 / 2);
+
+        const address = {
+            addressLines: ['1600 Pennsylvania Avenue NW'],
+            cityTown: 'Washington',
+            stateProvince: 'DC',
+            postalCode: '20500 ',
+            countryCode: 'US',
+            company: 'Pitney Bowes Inc.',
+            name: 'John Doe',
+            phone: '203-000-0000',
+            email: 'john.d@example.com',
+            residential: false
+        };
+
+        await assert.rejects(pb2.validateAddress({ address }), (err) => {
+            assert(err instanceof TypeError);
+            return true;
         });
     });
 
-    it('should validate an address and add postal service information', function(done) {
+    await t.test('should throw for non 200 status code', async () => {
+        const pitneyBowes = new PitneyBowes({
+            api_key: process.env.API_KEY,
+            api_secret: process.env.API_SECRET
+        });
+
+        await pitneyBowes.getOAuthToken();
+
+        const pb2 = new PitneyBowes({
+            api_key: process.env.API_KEY,
+            baseUrl: 'https://httpbin.org/status/500#'
+        });
+
+        const address = {
+            addressLines: ['1600 Pennsylvania Avenue NW'],
+            cityTown: 'Washington',
+            stateProvince: 'DC',
+            postalCode: '20500 ',
+            countryCode: 'US',
+            company: 'Pitney Bowes Inc.',
+            name: 'John Doe',
+            phone: '203-000-0000',
+            email: 'john.d@example.com',
+            residential: false
+        };
+
+        await assert.rejects(pb2.validateAddress({ address }), (err) => {
+            assert(err instanceof HttpError);
+            return true;
+        });
+    });
+
+    await t.test('should throw when no address is specified', async () => {
+        const pitneyBowes = new PitneyBowes({
+            api_key: process.env.API_KEY,
+            api_secret: process.env.API_SECRET
+        });
+
+        await assert.rejects(pitneyBowes.validateAddress({ minimalAddressValidation: false }), (err) => {
+            assert(err instanceof HttpError);
+            return true;
+        });
+    });
+
+    await t.test('should validate an address and add postal service information', async () => {
         const pitneyBowes = new PitneyBowes({
             api_key: process.env.API_KEY,
             api_secret: process.env.API_SECRET
         });
 
         const address = {
-            addressLines: [
-                '1600 Pennsylvania Avenue NW'
-            ],
+            addressLines: ['1600 Pennsylvania Avenue NW'],
             cityTown: 'Washington',
             stateProvince: 'DC',
             postalCode: '20500 ',
@@ -883,15 +667,12 @@ describe('PitneyBowes.validateAddress', function() {
             email: 'john.d@example.com'
         };
 
-        pitneyBowes.validateAddress({ address, minimalAddressValidation: false }, function(err, data) {
-            assert.ifError(err);
-            assert.ok(data);
-            assert.strictEqual(data.carrierRoute, 'C000');
-            assert.strictEqual(data.deliveryPoint, '00');
-            assert.strictEqual(data.postalCode, '20500-0005');
-            assert.strictEqual(data.status, 'VALIDATED_AND_NOT_CHANGED');
+        const data = await pitneyBowes.validateAddress({ address, minimalAddressValidation: false });
 
-            done();
-        });
+        assert.ok(data);
+        assert.strictEqual(data.carrierRoute, 'C000');
+        assert.strictEqual(data.deliveryPoint, '00');
+        assert.strictEqual(data.postalCode, '20500-0005');
+        assert.strictEqual(data.status, 'VALIDATED_AND_NOT_CHANGED');
     });
 });

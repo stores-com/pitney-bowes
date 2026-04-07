@@ -1,65 +1,45 @@
-name: build
+name: Test
 
 on: [push, pull_request, workflow_dispatch]
 
 jobs:
   test:
     if: github.actor != 'dependabot[bot]'
+    env:
+      NODE_VERSION: 24.11.0
     runs-on: ubuntu-latest
 
-    strategy:
-      matrix:
-        mongodb-version: [4.0.27]
-        node-version: [24.11.0]
-        redis-version: [4.0.14]
-
-    env:
-      DO_COVERALLS: 24.11.0/4.0.27/4.0.14
-
     steps:
-    - name: Setup Node ${{ matrix.node-version }}
+    - name: Setup Node ${{ env.NODE_VERSION }}
       uses: actions/setup-node@v6
       with:
-        node-version:  ${{ matrix.node-version }}
+        node-version: ${{ env.NODE_VERSION }}
 
-    - name: Checkout from Git
+    - name: Checkout
       uses: actions/checkout@v6
-      with:
-        persist-credentials: false
 
-    - name: Run npm install
+    - name: Install dependencies
       run: npm install
 
     - name: Lint
       run: npx eslint .
 
-    - name: Run tests and coverage report
-      run: |-
-        if [ "${{ matrix.node-version }}/${{ matrix.mongodb-version }}/${{ matrix.redis-version }}"x == "${DO_COVERALLS}"x ]
-        then
-          npm run coveralls
-        else
-          true
-        fi
-      env:
-        COVERALLS_REPO_TOKEN: ${{ secrets.COVERALLS_REPO_TOKEN }}
-        API_KEY: ${{ secrets.API_KEY }}
-        API_SECRET: ${{ secrets.API_SECRET }}
-
-    - name: Run tests and coverage report
-      run: |-
-        if [ ! "${{ matrix.node-version }}/${{ matrix.mongodb-version }}/${{ matrix.redis-version }}"x == "${DO_COVERALLS}"x ]
-        then
-          npm test
-        else
-          true
-        fi
+    - name: Test
       env:
         API_KEY: ${{ secrets.API_KEY }}
         API_SECRET: ${{ secrets.API_SECRET }}
+      run: |
+        node --test --test-force-exit --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=lcov.info
 
-    - name: Send Slack notification
-      if: always()
+    - name: Upload coverage to Coveralls
+      if: success()
+      uses: coverallsapp/github-action@v2
+      with:
+        fail-on-error: false
+        file: lcov.info
+
+    - if: always()
+      name: Send Slack notification
       run: |
         # Set common variables
         COMMIT_AUTHOR=$(git log -1 --format='%an' ${{ github.sha }} | sed "s/'/'\\\\''/g")
