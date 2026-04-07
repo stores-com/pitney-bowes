@@ -217,6 +217,14 @@ test('PitneyBowes.createManifest', { concurrency: true, timeout: 30000 }, async 
 
         const result = await pitneyBowes.createManifest({
             carrier: 'USPS',
+            fromAddress: {
+                addressLines: ['4750 Walnut Street'],
+                cityTown: 'Boulder',
+                countryCode: 'US',
+                name: 'Pitney Bowes',
+                postalCode: '80301',
+                stateProvince: 'CO'
+            },
             submissionDate: new Date().toISOString().split('T')[0],
             parameters: [
                 {
