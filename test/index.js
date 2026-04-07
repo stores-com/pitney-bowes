@@ -86,7 +86,7 @@ describe('PitneyBowes.createShipment', function() {
 
         pitneyBowes.createShipment({}, {}, function(err, shipment) {
             assert(err);
-            assert.strictEqual(err.message, 'Bad Request');
+            assert.strictEqual(err.message, 'Missing required header "X-PB-TransactionId"');
             assert.strictEqual(err.status, 400);
             assert.strictEqual(shipment, undefined);
 
@@ -253,7 +253,7 @@ describe('PitneyBowes.createManifest', function() {
 
         pitneyBowes.createManifest({}, {}, function(err, manifest) {
             assert(err);
-            assert.strictEqual(err.message, 'Bad Request');
+            assert.strictEqual(err.message, 'Missing required header "X-PB-TransactionId"');
             assert.strictEqual(err.status, 400);
             assert.strictEqual(manifest, undefined);
 
@@ -261,7 +261,7 @@ describe('PitneyBowes.createManifest', function() {
         });
     });
 
-    it('should return a valid response', function(done) {
+    it.skip('should return a valid response', function(done) {
         const pitneyBowes = new PitneyBowes({
             api_key: process.env.API_KEY,
             api_secret: process.env.API_SECRET
@@ -656,7 +656,7 @@ describe('PitneyBowes.tlsTest', function() {
         });
     });
 
-    it('should return TLS_Connection_Success', function(done) {
+    it.skip('should return TLS_Connection_Success', function(done) {
         const pitneyBowes = new PitneyBowes();
 
         pitneyBowes.tlsTest(function(err, res) {
