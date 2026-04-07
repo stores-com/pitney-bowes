@@ -66,7 +66,7 @@ All methods are `async` arrow functions on `this`. All accept an optional `_opti
 #### createShipment(shipment, _options = {})
 
 - Signature: `async (shipment, _options = {}) =>`
-- Calls `await this.getOAuthToken(_options)` for Bearer token
+- Calls `await this.getOAuthToken()` for Bearer token
 - Headers: `Authorization: Bearer ${token.access_token}`, `Content-Type: application/json`
 - POST to `${baseUrl}/v1/shipments`
 - Body: `JSON.stringify(shipment)`
@@ -76,7 +76,7 @@ All methods are `async` arrow functions on `this`. All accept an optional `_opti
 #### createManifest(manifest, _options = {})
 
 - Signature: `async (manifest, _options = {}) =>`
-- Calls `await this.getOAuthToken(_options)` for Bearer token
+- Calls `await this.getOAuthToken()` for Bearer token
 - Headers: `Authorization: Bearer ${token.access_token}`, `Content-Type: application/json`
 - POST to `${baseUrl}/v1/manifests`
 - Body: `JSON.stringify(manifest)`
@@ -86,7 +86,7 @@ All methods are `async` arrow functions on `this`. All accept an optional `_opti
 #### rate(shipment, _options = {})
 
 - Signature: `async (shipment, _options = {}) =>`
-- Calls `await this.getOAuthToken(_options)` for Bearer token
+- Calls `await this.getOAuthToken()` for Bearer token
 - Headers: `Authorization: Bearer ${token.access_token}`, `Content-Type: application/json`
 - POST to `${baseUrl}/v1/rates`
 - Body: `JSON.stringify(shipment)`
@@ -95,7 +95,7 @@ All methods are `async` arrow functions on `this`. All accept an optional `_opti
 #### tracking(args, _options = {})
 
 - Signature: `async (args, _options = {}) =>`
-- Calls `await this.getOAuthToken(_options)` for Bearer token
+- Calls `await this.getOAuthToken()` for Bearer token
 - Headers: `Authorization: Bearer ${token.access_token}`
 - GET to `${baseUrl}/v1/tracking/${args.trackingNumber}?packageIdentifierType=TrackingNumber&carrier=${args.carrier}`
 - `carrier` is required (no default)
@@ -112,7 +112,7 @@ All methods are `async` arrow functions on `this`. All accept an optional `_opti
 #### validateAddress(args, _options = {})
 
 - Signature: `async (args, _options = {}) =>`
-- Calls `await this.getOAuthToken(_options)` for Bearer token
+- Calls `await this.getOAuthToken()` for Bearer token
 - Headers: `Authorization: Bearer ${token.access_token}`, `Content-Type: application/json`
 - POST to `${baseUrl}/v1/addresses/verify?minimalAddressValidation=${args.minimalAddressValidation || false}`
 - Body: `JSON.stringify(args.address)`
