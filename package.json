@@ -7,8 +7,7 @@
     "devDependencies": {
         "@eslint/js": "*",
         "eslint": "*",
-        "globals": "*",
-        "nock": "*"
+        "globals": "*"
     },
     "keywords": [
         "logistics",
