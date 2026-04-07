@@ -2,6 +2,15 @@ const cache = require('memory-cache');
 
 const HttpError = require('@stores.com/http-error');
 
+/**
+ * Pitney Bowes Shipping API client.
+ * @param {Object} args
+ * @param {string} args.api_key - Pitney Bowes API key.
+ * @param {string} args.api_secret - Pitney Bowes API secret.
+ * @param {string} [args.baseUrl=https://shipping-api-sandbox.pitneybowes.com/shippingservices] - Base URL for the Shipping API.
+ * @param {string} [args.baseTestUrl=https://api-test.pitneybowes.com] - Base URL for the TLS test endpoint.
+ * @see https://docs.shippingapi.pitneybowes.com
+ */
 function PitneyBowes(args) {
     const options = {
         api_key: '',
@@ -11,6 +20,18 @@ function PitneyBowes(args) {
         ...args
     };
 
+    /**
+     * Create a shipment and purchase a shipping label.
+     * @param {Object} shipment - Shipment details (addresses, parcel, rates, documents).
+     * @param {Object} [_options={}]
+     * @param {string} [_options.integratorCarrierId] - Integrator carrier ID header.
+     * @param {string} [_options.shipmentGroupId] - Shipment group ID header.
+     * @param {string} [_options.transactionId] - Transaction ID header.
+     * @param {number} [_options.timeout=30000] - Request timeout in milliseconds.
+     * @returns {Promise<Object>} The created shipment with label data.
+     * @throws {HttpError} If the API returns a non-2xx response.
+     * @see https://docs.shippingapi.pitneybowes.com/api/post-shipments.html
+     */
     this.createShipment = async (shipment, _options = {}) => {
         const token = await this.getOAuthToken();
 
@@ -45,6 +66,16 @@ function PitneyBowes(args) {
         return await res.json();
     };
 
+    /**
+     * Create a manifest for carrier pickup.
+     * @param {Object} manifest - Manifest details (carrier, parameters).
+     * @param {Object} [_options={}]
+     * @param {string} [_options.transactionId] - Transaction ID header.
+     * @param {number} [_options.timeout=30000] - Request timeout in milliseconds.
+     * @returns {Promise<Object>} The created manifest.
+     * @throws {HttpError} If the API returns a non-2xx response.
+     * @see https://docs.shippingapi.pitneybowes.com/api/post-manifests.html
+     */
     this.createManifest = async (manifest, _options = {}) => {
         const token = await this.getOAuthToken();
 
@@ -71,6 +102,14 @@ function PitneyBowes(args) {
         return await res.json();
     };
 
+    /**
+     * Get an OAuth token for API authentication. Tokens are cached for half their lifetime.
+     * @param {Object} [_options={}]
+     * @param {number} [_options.timeout=30000] - Request timeout in milliseconds.
+     * @returns {Promise<Object>} The OAuth token with access_token, tokenType, expiresIn, etc.
+     * @throws {HttpError} If the API returns a non-2xx response.
+     * @see https://docs.shippingapi.pitneybowes.com/getting-started.html
+     */
     this.getOAuthToken = async (_options = {}) => {
         const url = `${options.baseUrl.replace('/shippingservices', '')}/oauth/token`;
         const key = `pitneybowes:oauth:${options.api_key}`;
@@ -102,6 +141,15 @@ function PitneyBowes(args) {
         return json;
     };
 
+    /**
+     * Get shipping rates for a shipment.
+     * @param {Object} shipment - Shipment details (addresses, parcel, rates).
+     * @param {Object} [_options={}]
+     * @param {number} [_options.timeout=30000] - Request timeout in milliseconds.
+     * @returns {Promise<Object>} Rate quotes with carrier pricing.
+     * @throws {HttpError} If the API returns a non-2xx response.
+     * @see https://docs.shippingapi.pitneybowes.com/api/post-rates.html
+     */
     this.rate = async (shipment, _options = {}) => {
         const token = await this.getOAuthToken();
 
@@ -122,6 +170,17 @@ function PitneyBowes(args) {
         return await res.json();
     };
 
+    /**
+     * Get tracking status for a package.
+     * @param {Object} args
+     * @param {string} args.trackingNumber - The package tracking number.
+     * @param {string} args.carrier - The carrier code (e.g. 'USPS').
+     * @param {Object} [_options={}]
+     * @param {number} [_options.timeout=30000] - Request timeout in milliseconds.
+     * @returns {Promise<Object>} Tracking details including status and scan events.
+     * @throws {HttpError} If the API returns a non-2xx response.
+     * @see https://docs.shippingapi.pitneybowes.com/api/get-tracking-details.html
+     */
     this.tracking = async (args, _options = {}) => {
         const token = await this.getOAuthToken();
 
@@ -140,6 +199,14 @@ function PitneyBowes(args) {
         return await res.json();
     };
 
+    /**
+     * Test TLS v1.2 connectivity to the Pitney Bowes API.
+     * @param {Object} [_options={}]
+     * @param {number} [_options.timeout=30000] - Request timeout in milliseconds.
+     * @returns {Promise<string>} 'TLS_Connection_Success' on success.
+     * @throws {HttpError} If the API returns a non-2xx response.
+     * @see https://docs.shippingapi.pitneybowes.com/getting-started.html
+     */
     this.tlsTest = async (_options = {}) => {
         const res = await fetch(`${options.baseTestUrl}/tlstest`, {
             signal: AbortSignal.timeout(_options.timeout || 30000)
@@ -152,6 +219,17 @@ function PitneyBowes(args) {
         return await res.text();
     };
 
+    /**
+     * Validate a US address and add postal service information.
+     * @param {Object} args
+     * @param {Object} args.address - The address to validate.
+     * @param {boolean} [args.minimalAddressValidation=false] - If true, only validate minimum required fields.
+     * @param {Object} [_options={}]
+     * @param {number} [_options.timeout=30000] - Request timeout in milliseconds.
+     * @returns {Promise<Object>} Validated address with postal service data.
+     * @throws {HttpError} If the API returns a non-2xx response.
+     * @see https://docs.shippingapi.pitneybowes.com/api/post-address-verify.html
+     */
     this.validateAddress = async (args, _options = {}) => {
         const token = await this.getOAuthToken();
 
