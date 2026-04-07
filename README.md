@@ -1,7 +1,9 @@
 # pitney-bowes
 
-[![Build Status](https://github.com/stores-com/pitney-bowes/actions/workflows/test.yml/badge.svg)](https://github.com/stores-com/pitney-bowes/actions)
-[![Coverage Status](https://coveralls.io/repos/github/stores-com/pitney-bowes/badge.svg)](https://coveralls.io/github/stores-com/pitney-bowes)
+[![Build Status](https://github.com/stores-com/pitney-bowes/actions/workflows/test.yml/badge.svg)](https://github.com/stores-com/pitney-bowes/actions/workflows/test.yml)
+[![Coverage Status](https://coveralls.io/repos/github/stores-com/pitney-bowes/badge.svg?branch=main)](https://coveralls.io/github/stores-com/pitney-bowes?branch=main)
+[![npm version](https://img.shields.io/npm/v/pitney-bowes)](https://www.npmjs.com/package/pitney-bowes)
+[![license](https://img.shields.io/npm/l/pitney-bowes)](https://github.com/stores-com/pitney-bowes/blob/main/LICENSE)
 
 The Pitney Bowes Complete Shipping APIs let you integrate shipping services from multiple carriers, including USPS, into your services and applications.
 
