@@ -61,7 +61,7 @@ All methods are `async` arrow functions on `this`. All accept an optional `_opti
 - Uses Basic auth with base64-encoded `api_key:api_secret`
 - Body: `new URLSearchParams({ grant_type: 'client_credentials' })`
 - Content-Type: `application/x-www-form-urlencoded`
-- Internal callers (other methods) call `await this.getOAuthToken(_options)` to propagate timeout
+- Internal callers call `await this.getOAuthToken()` with no options (matching USPS pattern — no timeout propagation to token fetch)
 
 #### createShipment(shipment, _options = {})
 
@@ -159,6 +159,53 @@ test('PitneyBowes.methodName', { concurrency: true }, async (t) => {
 });
 ```
 
+### Cache Key for "Invalid baseUrl with Token" Tests
+
+The "invalid baseUrl (with token)" tests pre-populate the cache to skip the OAuth call. With the new key format, seed using:
+
+```js
+cache.put(`pitneybowes:oauth:${process.env.API_KEY}`, token, token.expiresIn * 1000 / 2);
+```
+
+Then create a new instance with `baseUrl: 'invalid'` — the cached token is keyed by `api_key`, not URL, so it will be found regardless of `baseUrl`.
+
+### createManifest Valid Response Payload
+
+Uses USPS carrier with PB Expedited (SCAN Form):
+
+```js
+const manifest = {
+    carrier: 'USPS',
+    submissionDate: new Date().toISOString().split('T')[0],
+    parameters: [
+        { name: 'SHIPPER_ID', value: '9015544760' }
+    ]
+};
+```
+
+### Nock Mocks
+
+**Tracking success** — mock both OAuth token and tracking GET:
+
+```js
+nock('https://shipping-api-sandbox.pitneybowes.com')
+    .post('/oauth/token').reply(200, { access_token: 'mock', expiresIn: 36000 });
+nock('https://shipping-api-sandbox.pitneybowes.com/shippingservices')
+    .get('/v1/tracking/9234690390809100255164')
+    .query({ packageIdentifierType: 'TrackingNumber', carrier: 'USPS' })
+    .reply(200, { trackingNumber: '9234690390809100255164', status: 'Delivered', carrier: 'USPS' });
+```
+
+**TLS test success** — mock the GET to baseTestUrl:
+
+```js
+nock('https://api-test.pitneybowes.com')
+    .get('/tlstest')
+    .reply(200, 'TLS_Connection_Success');
+```
+
+Both mocked tests must call `nock.cleanAll()` in `t.after()` to avoid intercepting subsequent tests.
+
 ### Live vs Mock Tests
 
 | Method | Test | Live / Mock | Reason |
@@ -227,6 +274,7 @@ Mocked tests call `nock.cleanAll()` in a `t.after()` hook or at the end of the t
 
 ```json
 {
+  "name": "pitney-bowes",
   "dependencies": {
     "@stores.com/http-error": "~1.0.0",
     "memory-cache": "~0.2.0"
@@ -237,12 +285,16 @@ Mocked tests call `nock.cleanAll()` in a `t.after()` hook or at the end of the t
     "globals": "*",
     "nock": "*"
   },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/stores-com/pitney-bowes.git"
+  },
   "scripts": {
     "test": "node --test --test-force-exit --test-reporter=spec",
     "test:only": "node --test --test-force-exit --test-only --test-reporter=spec",
     "coveralls": "node --test --test-force-exit --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=lcov.info && coveralls < lcov.info"
   },
-  "license": "MIT",
   "version": "1.0.0"
 }
 ```
@@ -269,12 +321,12 @@ module.exports = [
         languageOptions: {
             globals: { ...globals.node }
         },
-        rules: { /* match USPS config */ }
+        rules: { /* copy rules from USPS eslint.config.js verbatim */ }
     }
 ];
 ```
 
-Note: the current branch config has `...globals.mocha` — remove it. `eslint` itself stays in devDependencies (used by CI via `npx eslint .`).
+Note: the current branch config has `...globals.mocha` — remove it. Copy the USPS rules exactly (including `no-console: 'error'`, `space-before-function-paren`, etc.). `eslint` itself stays in devDependencies (used by CI via `npx eslint .`).
 
 ### LICENSE
 
@@ -303,7 +355,7 @@ Replace `.github/workflows/continuousIntegration.yaml` with two workflows matchi
 
 1. All methods now return Promises instead of accepting callbacks
 2. Errors are thrown (as `HttpError` or `TypeError`) instead of passed to callbacks
-3. `tracking()` signature unchanged but `carrier` was already required (USPS fallback removed in previous commit)
+3. All methods that previously took `(data, options, callback)` now take `(data, _options = {})` — the callback parameter is removed, the second param becomes an options object (timeout, headers). `tracking(args, callback)` becomes `tracking(args, _options = {})`
 4. Error objects change from `http-errors` shape (`err.status`, `err.message`) to `HttpError` shape (`err.message = '${status} ${statusText}'`, `err.json`, `err.text`)
 5. OAuth token cache key changes from URL-based (`${baseUrl}/oauth/token`) to key-based (`pitneybowes:oauth:${api_key}`) — callers who interact with the cache directly (e.g., tests) must update
 6. `getOAuthToken()` now accepts an optional `_options` parameter (non-breaking for callers, but the signature changed)
