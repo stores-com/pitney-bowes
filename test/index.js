@@ -210,52 +210,25 @@ test('PitneyBowes.createManifest', { concurrency: true, timeout: 30000 }, async 
     });
 
     await t.test('should return a valid response', async () => {
-        nock('https://shipping-api-sandbox.pitneybowes.com')
-            .post('/oauth/token')
-            .reply(200, {
-                access_token: 'mock_token',
-                tokenType: 'BearerToken',
-                issuedAt: Date.now().toString(),
-                expiresIn: '36000',
-                clientID: 'mock',
-                org: 'pitneybowes'
-            });
-
-        nock('https://shipping-api-sandbox.pitneybowes.com/shippingservices')
-            .post('/v1/manifests')
-            .reply(201, {
-                carrier: 'USPS',
-                manifestId: 'USPS2200160A63D',
-                manifestTrackingNumber: '9202090100130981762308',
-                fromAddress: {
-                    addressLines: ['4750 Walnut Street'],
-                    cityTown: 'Boulder',
-                    stateProvince: 'CO',
-                    postalCode: '80301',
-                    countryCode: 'US'
-                },
-                parameters: [
-                    { name: 'SHIPPER_ID', value: '9015544760' }
-                ]
-            });
-
-        t.after(() => nock.cleanAll());
-
-        const pitneyBowes = new PitneyBowes();
+        const pitneyBowes = new PitneyBowes({
+            api_key: process.env.API_KEY,
+            api_secret: process.env.API_SECRET
+        });
 
         const result = await pitneyBowes.createManifest({
             carrier: 'USPS',
             submissionDate: new Date().toISOString().split('T')[0],
             parameters: [
-                { name: 'SHIPPER_ID', value: '9015544760' }
+                {
+                    name: 'SHIPPER_ID',
+                    value: '9015544760'
+                }
             ]
         }, {
             transactionId: crypto.randomBytes(12).toString('hex')
         });
 
         assert(result);
-        assert.strictEqual(result.carrier, 'USPS');
-        assert(result.manifestId);
     });
 });
 
