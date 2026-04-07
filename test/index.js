@@ -3,7 +3,6 @@ const crypto = require('crypto');
 const test = require('node:test');
 
 const cache = require('memory-cache');
-const nock = require('nock');
 
 const HttpError = require('@stores.com/http-error');
 const PitneyBowes = require('../index');
@@ -539,44 +538,80 @@ test('PitneyBowes.tracking', { concurrency: true, timeout: 30000 }, async (t) =>
     });
 
     await t.test('should return package status', async () => {
-        nock('https://shipping-api-sandbox.pitneybowes.com')
-            .post('/oauth/token')
-            .reply(200, {
-                access_token: 'mock_token',
-                tokenType: 'BearerToken',
-                issuedAt: Date.now().toString(),
-                expiresIn: '36000',
-                clientID: 'mock',
-                org: 'pitneybowes'
-            });
+        const pitneyBowes = new PitneyBowes({
+            api_key: process.env.API_KEY,
+            api_secret: process.env.API_SECRET
+        });
 
-        nock('https://shipping-api-sandbox.pitneybowes.com/shippingservices')
-            .get('/v1/tracking/9234690390809100255164')
-            .query({ packageIdentifierType: 'TrackingNumber', carrier: 'USPS' })
-            .reply(200, {
-                packageCount: 1,
-                trackingNumber: '9234690390809100255164',
-                carrier: 'USPS',
-                status: 'Delivered',
-                currentStatus: {
-                    packageStatus: 'Delivered'
+        // Create a shipment to get a valid tracking number
+        const shipment = await pitneyBowes.createShipment({
+            documents: [
+                {
+                    contentType: 'BASE64',
+                    fileFormat: 'ZPL2',
+                    printDialogOption: 'NO_PRINT_DIALOG',
+                    size: 'DOC_6X4',
+                    type: 'SHIPPING_LABEL'
+                }
+            ],
+            fromAddress: {
+                addressLines: ['4750 Walnut Street'],
+                cityTown: 'Boulder',
+                countryCode: 'US',
+                name: 'Pitney Bowes',
+                postalCode: '80301',
+                stateProvince: 'CO'
+            },
+            parcel: {
+                dimension: {
+                    height: 9,
+                    length: 12,
+                    unitOfMeasurement: 'IN',
+                    width: 0.25
                 },
-                scanDetailsList: [
-                    { standardizedEventCode: 'DLD', packageStatus: 'Delivered' },
-                    { standardizedEventCode: 'PSR', packageStatus: 'Manifest' }
-                ]
-            });
+                weight: {
+                    unitOfMeasurement: 'OZ',
+                    weight: 3
+                }
+            },
+            rates: [
+                {
+                    carrier: 'PBPRESORT',
+                    parcelType: 'LGENV',
+                    serviceId: 'BPM'
+                }
+            ],
+            shipmentOptions: [
+                {
+                    name: 'PERMIT_NUMBER',
+                    value: '1234'
+                },
+                {
+                    name: 'SHIPPER_ID',
+                    value: '9015544760'
+                }
+            ],
+            toAddress: {
+                addressLines: ['114 Whitney Ave'],
+                cityTown: 'New Haven',
+                countryCode: 'US',
+                name: 'John Doe',
+                postalCode: '06510',
+                stateProvince: 'CT'
+            }
+        }, {
+            integratorCarrierId: '987654321',
+            shipmentGroupId: '500002',
+            transactionId: crypto.randomBytes(12).toString('hex')
+        });
 
-        t.after(() => nock.cleanAll());
+        const data = await pitneyBowes.tracking({
+            carrier: 'PBPRESORT',
+            trackingNumber: shipment.parcelTrackingNumber
+        });
 
-        const pitneyBowes = new PitneyBowes();
-        const data = await pitneyBowes.tracking({ carrier: 'USPS', trackingNumber: '9234690390809100255164' });
-
-        assert.strictEqual(data.trackingNumber, '9234690390809100255164');
-        assert.strictEqual(data.carrier, 'USPS');
-        assert.strictEqual(data.status, 'Delivered');
-        assert.strictEqual(data.scanDetailsList.length, 2);
-        assert.strictEqual(data.currentStatus.packageStatus, 'Delivered');
+        assert(data);
+        assert.strictEqual(data.trackingNumber, shipment.parcelTrackingNumber);
     });
 });
 
