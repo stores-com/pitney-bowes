@@ -158,6 +158,7 @@ function PitneyBowes(args) {
         const res = await fetch(`${options.baseUrl}/v1/addresses/verify?minimalAddressValidation=${args.minimalAddressValidation || false}`, {
             body: JSON.stringify(args.address),
             headers: {
+                'Accept-Language': 'en-US',
                 Authorization: `Bearer ${token.access_token}`,
                 'Content-Type': 'application/json'
             },
