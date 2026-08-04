@@ -50,7 +50,7 @@ test('PitneyBowes.createShipment', { concurrency: true, timeout: 30000 }, async 
 
         const pb2 = new PitneyBowes({
             api_key: process.env.API_KEY,
-            baseUrl: 'https://httpbin.org/status/500#'
+            baseUrl: 'https://httpbingo.org/status/500#'
         });
 
         await assert.rejects(pb2.createShipment({}, {}), (err) => {
@@ -187,7 +187,7 @@ test('PitneyBowes.createManifest', { concurrency: true, timeout: 30000 }, async 
 
         const pb2 = new PitneyBowes({
             api_key: process.env.API_KEY,
-            baseUrl: 'https://httpbin.org/status/500#'
+            baseUrl: 'https://httpbingo.org/status/500#'
         });
 
         await assert.rejects(pb2.createManifest({}, {}), (err) => {
@@ -318,7 +318,7 @@ test('PitneyBowes.getOAuthToken', { concurrency: true, timeout: 30000 }, async (
         const pitneyBowes = new PitneyBowes({
             api_key: process.env.API_KEY,
             api_secret: process.env.API_SECRET,
-            baseUrl: 'https://httpbin.org/status/500#'
+            baseUrl: 'https://httpbingo.org/status/500#'
         });
 
         await assert.rejects(pitneyBowes.getOAuthToken(), (err) => {
@@ -400,7 +400,7 @@ test('PitneyBowes.rate', { concurrency: true, timeout: 30000 }, async (t) => {
 
         const pb2 = new PitneyBowes({
             api_key: process.env.API_KEY,
-            baseUrl: 'https://httpbin.org/status/500#'
+            baseUrl: 'https://httpbingo.org/status/500#'
         });
 
         await assert.rejects(pb2.rate({}, {}), (err) => {
@@ -516,7 +516,7 @@ test('PitneyBowes.tracking', { concurrency: true, timeout: 30000 }, async (t) =>
 
         const pb2 = new PitneyBowes({
             api_key: process.env.API_KEY,
-            baseUrl: 'https://httpbin.org/status/500#'
+            baseUrl: 'https://httpbingo.org/status/500#'
         });
 
         await assert.rejects(pb2.tracking({ carrier: 'USPS', trackingNumber: '4206311892612927005269000081323326' }), (err) => {
@@ -696,7 +696,7 @@ test('PitneyBowes.validateAddress', { concurrency: true, timeout: 30000 }, async
 
         const pb2 = new PitneyBowes({
             api_key: process.env.API_KEY,
-            baseUrl: 'https://httpbin.org/status/500#'
+            baseUrl: 'https://httpbingo.org/status/500#'
         });
 
         const address = {
