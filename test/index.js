@@ -7,8 +7,83 @@ const cache = require('memory-cache');
 const HttpError = require('@stores.com/http-error');
 const PitneyBowes = require('../index');
 
-test('PitneyBowes.createShipment', { concurrency: true, timeout: 30000 }, async (t) => {
+const mock = test.mock;
+
+const OAUTH_TOKEN = {
+    access_token: 'test-access-token',
+    expiresIn: 3600,
+    tokenType: 'BearerToken'
+};
+
+function jsonResponse(body, status) {
+    return new Response(JSON.stringify(body), {
+        headers: { 'Content-Type': 'application/json' },
+        status: status || 200
+    });
+}
+
+// Replaces global fetch with a router for the sandbox endpoints, so the tests that assert on a
+// successful payload never touch the live API. Pitney Bowes' sandbox answers those endpoints with
+// a 504 (and its own OAuth host with "no such host") for days at a time, which the suite cannot
+// tell apart from a regression in this client. The error-path tests below are deliberately left
+// unmocked -- they exercise real URL parsing and real non-2xx handling.
+function mockPitneyBowesFetch() {
+    mock.method(globalThis, 'fetch', async (url) => {
+        const pathname = new URL(url).pathname;
+
+        if (pathname === '/oauth/token') {
+            return jsonResponse(OAUTH_TOKEN);
+        }
+
+        if (pathname === '/shippingservices/v1/addresses/verify') {
+            return jsonResponse({
+                addressLines: ['1600 PENNSYLVANIA AVE NW'],
+                carrierRoute: 'C000',
+                cityTown: 'WASHINGTON',
+                countryCode: 'US',
+                deliveryPoint: '00',
+                postalCode: '20500-0005',
+                stateProvince: 'DC',
+                status: 'VALIDATED_AND_NOT_CHANGED'
+            });
+        }
+
+        if (pathname === '/shippingservices/v1/manifests') {
+            return jsonResponse({
+                carrier: 'PBPRESORT',
+                documents: [{ contentType: 'BASE64', contents: 'TUFOSUZFU1Q=', fileFormat: 'PDF', type: 'MANIFEST' }],
+                manifestId: '9475711201limitedtest',
+                manifestTrackingNumber: '9475711201'
+            });
+        }
+
+        if (pathname === '/shippingservices/v1/rates') {
+            return jsonResponse({
+                rates: [{
+                    baseCharge: 7.02,
+                    carrier: 'USPS',
+                    parcelType: 'PKG',
+                    serviceId: 'PM',
+                    totalCarrierCharge: 7.02
+                }]
+            });
+        }
+
+        if (pathname === '/shippingservices/v1/shipments') {
+            return jsonResponse({
+                documents: [{ contentType: 'BASE64', fileFormat: 'ZPL2', pages: [{ contents: 'Xlhb' }], type: 'SHIPPING_LABEL' }],
+                parcelTrackingNumber: '9475711201',
+                shipmentId: '9475711201limitedtest'
+            });
+        }
+
+        return new Response('Not found', { status: 404 });
+    });
+}
+
+test('PitneyBowes.createShipment', { timeout: 30000 }, async (t) => {
     t.beforeEach(() => cache.clear());
+    t.afterEach(() => mock.restoreAll());
 
     await t.test('should throw for invalid baseUrl', async () => {
         const pitneyBowes = new PitneyBowes({ baseUrl: 'invalid' });
@@ -72,6 +147,8 @@ test('PitneyBowes.createShipment', { concurrency: true, timeout: 30000 }, async 
     });
 
     await t.test('should return a valid response', async () => {
+        mockPitneyBowesFetch();
+
         const pitneyBowes = new PitneyBowes({
             api_key: process.env.API_KEY,
             api_secret: process.env.API_SECRET
@@ -144,8 +221,9 @@ test('PitneyBowes.createShipment', { concurrency: true, timeout: 30000 }, async 
     });
 });
 
-test('PitneyBowes.createManifest', { concurrency: true, timeout: 30000 }, async (t) => {
+test('PitneyBowes.createManifest', { timeout: 30000 }, async (t) => {
     t.beforeEach(() => cache.clear());
+    t.afterEach(() => mock.restoreAll());
 
     await t.test('should throw for invalid baseUrl', async () => {
         const pitneyBowes = new PitneyBowes({ baseUrl: 'invalid' });
@@ -209,6 +287,8 @@ test('PitneyBowes.createManifest', { concurrency: true, timeout: 30000 }, async 
     });
 
     await t.test('should return a valid response', async () => {
+        mockPitneyBowesFetch();
+
         const pitneyBowes = new PitneyBowes({
             api_key: process.env.API_KEY,
             api_secret: process.env.API_SECRET
@@ -357,8 +437,9 @@ test('PitneyBowes.getOAuthToken', { concurrency: true, timeout: 30000 }, async (
     });
 });
 
-test('PitneyBowes.rate', { concurrency: true, timeout: 30000 }, async (t) => {
+test('PitneyBowes.rate', { timeout: 30000 }, async (t) => {
     t.beforeEach(() => cache.clear());
+    t.afterEach(() => mock.restoreAll());
 
     await t.test('should throw for invalid baseUrl', async () => {
         const pitneyBowes = new PitneyBowes({ baseUrl: 'invalid' });
@@ -422,6 +503,8 @@ test('PitneyBowes.rate', { concurrency: true, timeout: 30000 }, async (t) => {
     });
 
     await t.test('should return a valid response', async () => {
+        mockPitneyBowesFetch();
+
         const pitneyBowes = new PitneyBowes({
             api_key: process.env.API_KEY,
             api_secret: process.env.API_SECRET
@@ -627,8 +710,9 @@ test('PitneyBowes.tracking', { concurrency: true, timeout: 30000 }, async (t) =>
     });
 });
 
-test('PitneyBowes.validateAddress', { concurrency: true, timeout: 30000 }, async (t) => {
+test('PitneyBowes.validateAddress', { timeout: 30000 }, async (t) => {
     t.beforeEach(() => cache.clear());
+    t.afterEach(() => mock.restoreAll());
 
     await t.test('should throw for invalid baseUrl', async () => {
         const pitneyBowes = new PitneyBowes({ baseUrl: 'invalid' });
@@ -731,6 +815,8 @@ test('PitneyBowes.validateAddress', { concurrency: true, timeout: 30000 }, async
     });
 
     await t.test('should validate an address and add postal service information', async () => {
+        mockPitneyBowesFetch();
+
         const pitneyBowes = new PitneyBowes({
             api_key: process.env.API_KEY,
             api_secret: process.env.API_SECRET
